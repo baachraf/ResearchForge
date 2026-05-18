@@ -1,0 +1,82 @@
+{
+  "name": "Dark",
+  "tokens": {
+    "primary": "#818cf8",
+    "primary_hover": "#a5b4fc",
+    "primary_pressed": "#6366f1",
+    "primary_light": "#1e1b4b",
+
+    "bg_main": "#0f172a",
+    "bg_card": "#1e293b",
+    "bg_alt": "#162032",
+    "bg_secondary": "#334155",
+    "bg_input": "#0f172a",
+    "bg_disabled": "#1e293b",
+
+    "border_default": "#334155",
+    "border_input": "#475569",
+    "border_focus": "#818cf8",
+    "border_disabled": "#334155",
+
+    "text_primary": "#e2e8f0",
+    "text_secondary": "#94a3b8",
+    "text_muted": "#64748b",
+    "text_inverse": "#ffffff",
+    "text_disabled": "#546580",
+
+    "success": "#22c55e",
+    "success_hover": "#4ade80",
+    "success_light": "#052e16",
+
+    "danger": "#ef4444",
+    "danger_hover": "#f87171",
+    "danger_light": "#450a0a",
+
+    "action_teal": "#14b8a6",
+    "action_teal_hover": "#2dd4bf",
+    "action_teal_pressed": "#0d9488",
+    "action_teal_light": "#042f2e",
+    "action_teal_disabled": "#134e4a",
+
+    "action_indigo": "#818cf8",
+    "action_indigo_hover": "#a5b4fc",
+    "action_indigo_light": "#1e1b4b",
+    "action_indigo_disabled": "#312e81",
+
+    "action_bluegrey": "#94a3b8",
+    "action_bluegrey_hover": "#cbd5e1",
+
+    "action_purple": "#a855f7",
+    "action_purple_hover": "#c084fc",
+
+    "action_amber": "#f59e0b",
+    "action_amber_hover": "#fbbf24",
+
+    "action_lightblue": "#0ea5e9",
+    "action_lightblue_hover": "#38bdf8",
+
+    "scrollbar_bg": "#0f172a",
+    "scrollbar_handle": "#475569",
+    "scrollbar_handle_hover": "#64748b",
+
+    "tooltip_bg": "#334155",
+    "tooltip_text": "#f1f5f9",
+
+    "progress_gradient_end": "#38bdf8",
+
+    "stop_red": "#ef4444",
+    "done_green": "#22c55e",
+    "badge_orange": "#fbbf24",
+    "link_blue": "#93c5fd",
+    "link_blue_hover": "#bfdbfe",
+    "hint_gray": "#7e8ea0",
+    "selection_bg": "#312e81",
+    "selection_fg": "#e2e8f0",
+    "panel_bg": "#162032",
+    "panel_border": "#334155",
+    "panel_text": "#cbd5e1",
+
+    "font_mono": "\"JetBrains Mono\", \"Consolas\", \"Courier New\", monospace",
+    "font_sans": "\"Segoe UI\", \"Inter\", system-ui, sans-serif"
+  }
+}

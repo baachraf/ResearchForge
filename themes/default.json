@@ -1,0 +1,81 @@
+{
+  "name": "Default Light",
+  "tokens": {
+    "primary": "#2563eb",
+    "primary_hover": "#1d4ed8",
+    "primary_pressed": "#1e40af",
+    "primary_light": "#dbeafe",
+
+    "bg_main": "#e4e9f0",
+    "bg_card": "#ffffff",
+    "bg_alt": "#f1f4f9",
+    "bg_secondary": "#d3dae3",
+    "bg_input": "#f9fafb",
+    "bg_disabled": "#e2e8f0",
+
+    "border_default": "#b0bbc7",
+    "border_input": "#7c8ea0",
+    "border_focus": "#2563eb",
+    "border_disabled": "#cfd8e2",
+
+    "text_primary": "#0f172a",
+    "text_secondary": "#475569",
+    "text_muted": "#64748b",
+    "text_inverse": "#ffffff",
+    "text_disabled": "#9ca3af",
+
+    "success": "#16a34a",
+    "success_hover": "#15803d",
+    "success_light": "#dcfce7",
+
+    "danger": "#dc2626",
+    "danger_hover": "#b91c1c",
+    "danger_light": "#fee2e2",
+
+    "action_teal": "#0d9488",
+    "action_teal_hover": "#0f766e",
+    "action_teal_pressed": "#115e59",
+    "action_teal_light": "#ccfbf1",
+    "action_teal_disabled": "#f0fdfa",
+
+    "action_indigo": "#4f46e5",
+    "action_indigo_hover": "#4338ca",
+    "action_indigo_light": "#e0e7ff",
+    "action_indigo_disabled": "#eef2ff",
+
+    "action_bluegrey": "#475569",
+    "action_bluegrey_hover": "#334155",
+
+    "action_purple": "#7c3aed",
+    "action_purple_hover": "#6d28d9",
+
+    "action_amber": "#d97706",
+    "action_amber_hover": "#b45309",
+
+    "action_lightblue": "#0284c7",
+    "action_lightblue_hover": "#0369a1",
+
+    "scrollbar_handle": "#9ca3af",
+    "scrollbar_handle_hover": "#6b7280",
+
+    "tooltip_bg": "#1e293b",
+    "tooltip_text": "#f1f5f9",
+
+    "progress_gradient_end": "#0ea5e9",
+
+    "stop_red": "#dc2626",
+    "done_green": "#16a34a",
+    "badge_orange": "#ea580c",
+    "link_blue": "#1d4ed8",
+    "link_blue_hover": "#1e40af",
+    "hint_gray": "#64748b",
+    "selection_bg": "#60a5fa",
+    "selection_fg": "#ffffff",
+    "panel_bg": "#eef2f7",
+    "panel_border": "#cbd5e1",
+    "panel_text": "#1e293b",
+
+    "font_mono": "\"JetBrains Mono\", \"Consolas\", \"Courier New\", monospace",
+    "font_sans": "\"Segoe UI\", \"Inter\", system-ui, sans-serif"
+  }
+}

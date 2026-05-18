@@ -1,0 +1,29 @@
+# IDE
+.idea/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Downloaded PDFs and registries
+downloaded_pdfs/
+
+# Environment
+.env
+.venv/
+venv/
+
+# User-specific config (now lives in ~/.llm-research/)
+config/settings.json
+config/sessions/
+
+# OS
+.DS_Store
+.claude/
+Thumbs.db
+
+CLAUDE.md
+docs/
+release.bat
