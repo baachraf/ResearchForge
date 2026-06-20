@@ -96,11 +96,16 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QScrollArea.NoFrame)
         self.settings_tab = SettingsTab(self.cfg, self.log_signal)
         scroll.setWidget(self.settings_tab)
+        # Size the settings pane to its real content height so it opens fully
+        # (both source rows visible) without a manual resize. The trailing
+        # stretch inside SettingsTab absorbs any slack, so no padding appears.
+        _settings_h = self.settings_tab.sizeHint().height() + 8
+        scroll.setMinimumHeight(_settings_h)
         sp_split.addWidget(scroll)
 
         self.prompt_tab = PromptEditorTab(self.cfg, self.log_signal)
         sp_split.addWidget(self.prompt_tab)
-        sp_split.setSizes([270, 530])
+        sp_split.setSizes([_settings_h, max(360, 800 - _settings_h)])
         sl = QVBoxLayout(settings_prompts_tab)
         sl.setContentsMargins(0, 0, 0, 0)
         sl.addWidget(sp_split)

@@ -111,7 +111,6 @@ class SettingsTab(QWidget):
         layout.addLayout(hb1)
 
         self.grp_def = QGroupBox("Query Defaults")
-        self.grp_def.setMinimumHeight(150)  # default height — ensures both source rows show
         # Tight group: no extra top/bottom padding, rows sit close together.
         gs = QVBoxLayout(self.grp_def); gs.setSpacing(6); gs.setContentsMargins(8,1,8,1)
 
@@ -191,6 +190,9 @@ class SettingsTab(QWidget):
         btn_wrap.addWidget(self.btn_set_keys)
         hb_def.addLayout(btn_wrap)
         layout.addLayout(hb_def)
+        # Any spare vertical space collects here, at the bottom — so groups stay
+        # tight (no inter-row padding) and nothing is truncated on open.
+        layout.addStretch(1)
 
     # ── Provider / Model ──
 
