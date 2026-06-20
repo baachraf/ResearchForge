@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLineEdit, QPushButton, QComboBox, QFileDialog, QLabel,
     QMessageBox, QCheckBox, QSpinBox, QDoubleSpinBox, QSizePolicy,
+    QDialog, QDialogButtonBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
@@ -62,21 +63,8 @@ class SettingsTab(QWidget):
         self.lbl_status = QLabel(""); self.lbl_status.setWordWrap(True)
         self.lbl_status.setObjectName("lbl_status")
         lg.addWidget(self.lbl_status)
-        hb1.addWidget(self.grp_llm, 3)
-
-        self.grp_keys = QGroupBox("API Keys")
-        kk = QVBoxLayout(self.grp_keys); kk.setSpacing(4); kk.setContentsMargins(6,4,6,4)
-        for attr, label_text in [
-            ("deepseek_key", "DeepSeek:"), ("gemini_key", "Gemini:"),
-            ("brave_key", "Brave:"), ("s2_key", "Semantic Scholar:")
-        ]:
-            row = QHBoxLayout(); row.setSpacing(4)
-            lb = QLabel(label_text); lb.setObjectName("sc_bold_label"); lb.setFixedWidth(100); row.addWidget(lb)
-            le = QLineEdit(); le.setEchoMode(QLineEdit.Password); le.setFixedHeight(22)
-            setattr(self, attr, le)
-            row.addWidget(le, 1)
-            kk.addLayout(row)
-        hb1.addWidget(self.grp_keys, 4)
+        # LLM gains a little width; API keys now live behind the "Set Keys" dialog.
+        hb1.addWidget(self.grp_llm, 4)
 
         self.grp_dirs = QGroupBox("Directories")
         dd = QVBoxLayout(self.grp_dirs); dd.setSpacing(4); dd.setContentsMargins(6,4,6,4)
@@ -107,7 +95,8 @@ class SettingsTab(QWidget):
         ba.setFixedSize(24, 24); ba.setToolTip("Browse audit results directory")
         ba.clicked.connect(lambda: self._browse_dir(self.audit_output_dir, "Audit Results"))
         ha.addWidget(ba); dd.addLayout(ha)
-        hb1.addWidget(self.grp_dirs, 4)
+        # Directories takes most of the width freed by the removed API Keys group.
+        hb1.addWidget(self.grp_dirs, 8)
 
         vb = QVBoxLayout(); vb.setSpacing(4)
         for lbl, slt, obj in [("Save",self._on_save,"btn_save"),("Load",self._on_load_file,"btn_session_load"),
@@ -115,6 +104,7 @@ class SettingsTab(QWidget):
             b = QPushButton(lbl)
             b.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
             b.setObjectName(obj)
+            b.setMinimumWidth(96)  # wider — there is spare room now
             b.clicked.connect(slt); vb.addWidget(b)
         hb1.addLayout(vb)
 
@@ -145,23 +135,50 @@ class SettingsTab(QWidget):
         qp.addWidget(self.force_plus)
         gs.addLayout(qp)
 
+        _COMING = "Coming soon — provider backend not yet wired"
+
+        # Row 1 — implemented + new keyless providers
         qs = QHBoxLayout(); qs.setSpacing(6)
-        qs.addWidget(QLabel("Sources:"))
+        lbl_src = QLabel("Sources:"); lbl_src.setFixedWidth(55); qs.addWidget(lbl_src)
         self.src_arxiv = QCheckBox("arXiv"); self.src_arxiv.setChecked(True); qs.addWidget(self.src_arxiv)
         qs.addStretch()
-        self.src_s2 = QCheckBox("Semantic Scholar"); self.src_s2.setChecked(True); qs.addWidget(self.src_s2)
+        self.src_openalex = QCheckBox("OpenAlex"); self.src_openalex.setEnabled(False); self.src_openalex.setToolTip(_COMING); qs.addWidget(self.src_openalex)
         qs.addStretch()
-        self.src_duckduckgo = QCheckBox("DuckDuckGo"); self.src_duckduckgo.setChecked(True); qs.addWidget(self.src_duckduckgo)
+        self.src_crossref = QCheckBox("Crossref"); self.src_crossref.setEnabled(False); self.src_crossref.setToolTip(_COMING); qs.addWidget(self.src_crossref)
         qs.addStretch()
-        self.src_brave = QCheckBox("Brave"); self.src_brave.setChecked(True); qs.addWidget(self.src_brave)
+        self.src_europepmc = QCheckBox("Europe PMC"); self.src_europepmc.setEnabled(False); self.src_europepmc.setToolTip(_COMING); qs.addWidget(self.src_europepmc)
         qs.addStretch()
-        self.src_pubmed = QCheckBox("PubMed"); self.src_pubmed.setChecked(True); qs.addWidget(self.src_pubmed)
+        self.src_doaj = QCheckBox("DOAJ"); self.src_doaj.setEnabled(False); self.src_doaj.setToolTip(_COMING); qs.addWidget(self.src_doaj)
         qs.addStretch()
         gs.addLayout(qs)
-        layout.addWidget(self.grp_def)
 
-        self.brave_key.textChanged.connect(self._update_source_enables)
-        self.s2_key.textChanged.connect(self._update_source_enables)
+        # Row 2 — remaining implemented + CORE (keyed, pending backend)
+        qs2 = QHBoxLayout(); qs2.setSpacing(6)
+        lbl_pad = QLabel(""); lbl_pad.setFixedWidth(55); qs2.addWidget(lbl_pad)
+        self.src_pubmed = QCheckBox("PubMed"); self.src_pubmed.setChecked(True); qs2.addWidget(self.src_pubmed)
+        qs2.addStretch()
+        self.src_s2 = QCheckBox("Semantic Scholar"); self.src_s2.setChecked(True); qs2.addWidget(self.src_s2)
+        qs2.addStretch()
+        self.src_core = QCheckBox("CORE"); self.src_core.setEnabled(False); self.src_core.setToolTip(_COMING); qs2.addWidget(self.src_core)
+        qs2.addStretch()
+        self.src_brave = QCheckBox("Brave"); self.src_brave.setChecked(True); qs2.addWidget(self.src_brave)
+        qs2.addStretch()
+        self.src_duckduckgo = QCheckBox("DuckDuckGo"); self.src_duckduckgo.setChecked(True); qs2.addWidget(self.src_duckduckgo)
+        qs2.addStretch()
+        gs.addLayout(qs2)
+
+        # Query Defaults group + tall "Set Keys" button (matches group height)
+        hb_def = QHBoxLayout(); hb_def.setSpacing(4)
+        hb_def.addWidget(self.grp_def, 1)
+        self.btn_set_keys = QPushButton("\U0001F511\nSet Keys")
+        self.btn_set_keys.setObjectName("btn_save")
+        self.btn_set_keys.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.btn_set_keys.setFixedWidth(110)
+        self.btn_set_keys.setCursor(Qt.PointingHandCursor)
+        self.btn_set_keys.setToolTip("Enter all LLM and search-provider API keys")
+        self.btn_set_keys.clicked.connect(self._open_keys_dialog)
+        hb_def.addWidget(self.btn_set_keys)
+        layout.addLayout(hb_def)
 
     # ── Provider / Model ──
 
@@ -222,10 +239,18 @@ class SettingsTab(QWidget):
             QMessageBox.warning(self, "LLM Error", str(e))
 
     def _update_source_enables(self):
-        has_brave = bool(self.brave_key.text().strip())
+        has_brave = bool(self.cfg.get("brave_api_key", "").strip())
         self.src_brave.setEnabled(has_brave)
         if not has_brave:
             self.src_brave.setChecked(False)
+
+    # ── API Keys dialog ──
+
+    def _open_keys_dialog(self):
+        dlg = KeysDialog(self.cfg, self)
+        if dlg.exec():
+            self._update_source_enables()
+            self.log.emit("API keys updated.")
 
     # ── Config I/O ──
 
@@ -260,10 +285,6 @@ class SettingsTab(QWidget):
         if active_endpoint:
             self._fetch_models(active_provider, active_endpoint)
 
-        self.deepseek_key.setText(self.cfg.get("deepseek_api_key", ""))
-        self.gemini_key.setText(self.cfg.get("gemini_api_key", ""))
-        self.brave_key.setText(self.cfg.get("brave_api_key", ""))
-        self.s2_key.setText(self.cfg.get("semantic_scholar_api_key", ""))
         self.output_root.setText(self.cfg.get("output_root", ""))
         self.output_root.end(False)
         self.summary_output_dir.setText(self.cfg.get("summary_output_dir", ""))
@@ -273,10 +294,6 @@ class SettingsTab(QWidget):
         self.output_root.textChanged.connect(lambda t: self.cfg.set("output_root", t.strip()))
         self.summary_output_dir.textChanged.connect(lambda t: self.cfg.set("summary_output_dir", t.strip()))
         self.audit_output_dir.textChanged.connect(lambda t: self.cfg.set("audit_output_dir", t.strip()))
-        self.brave_key.textChanged.connect(lambda t: self.cfg.set("brave_api_key", t.strip()))
-        self.s2_key.textChanged.connect(lambda t: self.cfg.set("semantic_scholar_api_key", t.strip()))
-        self.deepseek_key.textChanged.connect(lambda t: self.cfg.set("deepseek_api_key", t.strip()))
-        self.gemini_key.textChanged.connect(lambda t: self.cfg.set("gemini_api_key", t.strip()))
         self.after_date.setText(self.cfg.get("default_after_date", "") or "2020-01-01")
         self.max_results.setValue(self.cfg.get("default_max_results", 100))
         self.max_size_mb.setValue(self.cfg.get("default_max_size_mb", 100.0))
@@ -311,10 +328,6 @@ class SettingsTab(QWidget):
         model = self.model_combo.currentData() or self.model_combo.currentText()
         if model and model.strip():
             self.cfg.set("llm_model", model.strip())
-        self.cfg.set("deepseek_api_key", self.deepseek_key.text().strip())
-        self.cfg.set("gemini_api_key", self.gemini_key.text().strip())
-        self.cfg.set("brave_api_key", self.brave_key.text().strip())
-        self.cfg.set("semantic_scholar_api_key", self.s2_key.text().strip())
         self.cfg.set("output_root", self.output_root.text().strip())
         self.cfg.set("summary_output_dir", self.summary_output_dir.text().strip())
         self.cfg.set("audit_output_dir", self.audit_output_dir.text().strip())
@@ -347,10 +360,10 @@ class SettingsTab(QWidget):
             self.provider_combo.setCurrentIndex(0)
             self.provider_combo.blockSignals(False)
             self.model_combo.clear()
-            self.deepseek_key.clear()
-            self.gemini_key.clear()
-            self.brave_key.clear()
-            self.s2_key.clear()
+            for k in ("deepseek_api_key", "gemini_api_key", "brave_api_key",
+                      "semantic_scholar_api_key", "core_api_key",
+                      "pubmed_email", "contact_email"):
+                self.cfg.set(k, "")
             self.output_root.clear()
             self.summary_output_dir.clear()
             self.audit_output_dir.clear()
@@ -365,6 +378,7 @@ class SettingsTab(QWidget):
             self.src_brave.setChecked(True)
             self.src_pubmed.setChecked(True)
             self.lbl_status.setText("")
+            self._update_source_enables()  # Brave key now empty → disable its checkbox
             self._save_to_config()
 
     def _on_load_file(self):
@@ -389,12 +403,89 @@ class SettingsTab(QWidget):
     def get_credentials(self) -> dict:
         return {
             "brave_search": {
-                "api_key": self.brave_key.text().strip(),
+                "api_key": self.cfg.get("brave_api_key", "").strip(),
                 "enabled": self.src_brave.isChecked() and self.src_brave.isEnabled(),
             },
             "semantic_scholar": {
-                "api_key": self.s2_key.text().strip(),
+                "api_key": self.cfg.get("semantic_scholar_api_key", "").strip(),
                 "enabled": self.src_s2.isChecked() and self.src_s2.isEnabled(),
             },
             "arxiv": {"enabled": True},
         }
+
+
+class KeysDialog(QDialog):
+    """Single place to enter every API key — LLM and search providers.
+
+    Reads from / writes to the shared ConfigManager so the rest of the app keeps
+    using the same cfg keys it always has. Keyless providers (OpenAlex, Crossref,
+    Europe PMC, DOAJ) need no entry here.
+    """
+
+    # (cfg_key, label, is_password, hint)
+    _LLM_FIELDS = [
+        ("deepseek_api_key", "DeepSeek:", True, ""),
+        ("gemini_api_key", "Gemini:", True, ""),
+    ]
+    _SEARCH_FIELDS = [
+        ("brave_api_key", "Brave:", True, "required"),
+        ("core_api_key", "CORE:", True, "required"),
+        ("semantic_scholar_api_key", "Semantic Scholar:", True, "optional"),
+        ("pubmed_email", "PubMed email:", False, "optional"),
+        ("contact_email", "Contact email:", False, "optional"),
+    ]
+
+    def __init__(self, cfg, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self._edits = {}
+        self.setWindowTitle("Set API Keys")
+        self.setModal(True)
+        self.setMinimumWidth(440)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        grp_llm = QGroupBox("LLM")
+        f_llm = QFormLayout(grp_llm)
+        for key, label, pw, hint in self._LLM_FIELDS:
+            f_llm.addRow(label, self._make_field(key, pw, hint))
+        layout.addWidget(grp_llm)
+
+        grp_search = QGroupBox("Search providers")
+        f_search = QFormLayout(grp_search)
+        for key, label, pw, hint in self._SEARCH_FIELDS:
+            f_search.addRow(label, self._make_field(key, pw, hint))
+        layout.addWidget(grp_search)
+
+        info = QLabel(
+            "OpenAlex, Crossref, Europe PMC and DOAJ need no key. "
+            "Contact email is used for their “polite pool” rate limits."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("sc_hint")
+        layout.addWidget(info)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._on_save)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _make_field(self, key, password, hint):
+        le = QLineEdit(self.cfg.get(key, ""))
+        if password:
+            le.setEchoMode(QLineEdit.Password)
+        self._edits[key] = le
+        if not hint:
+            return le
+        wrap = QWidget()
+        row = QHBoxLayout(wrap); row.setSpacing(6); row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(le, 1)
+        lh = QLabel(hint); lh.setObjectName("sc_hint")
+        row.addWidget(lh, 0)
+        return wrap
+
+    def _on_save(self):
+        for key, le in self._edits.items():
+            self.cfg.set(key, le.text().strip())
+        self.accept()
