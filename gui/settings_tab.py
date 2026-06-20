@@ -111,7 +111,7 @@ class SettingsTab(QWidget):
         layout.addLayout(hb1)
 
         self.grp_def = QGroupBox("Query Defaults")
-        self.grp_def.setMinimumHeight(120)  # consistent default height
+        self.grp_def.setMinimumHeight(150)  # default height — ensures both source rows show
         # Tight group: no extra top/bottom padding, rows sit close together.
         gs = QVBoxLayout(self.grp_def); gs.setSpacing(6); gs.setContentsMargins(8,1,8,1)
 
@@ -162,9 +162,14 @@ class SettingsTab(QWidget):
         qs2.addStretch()
         self.src_s2 = QCheckBox("Semantic Scholar"); self.src_s2.setChecked(True); qs2.addWidget(self.src_s2)
         qs2.addStretch()
-        self.src_core = QCheckBox("CORE"); self.src_core.setToolTip(_PENDING); qs2.addWidget(self.src_core)
+        # CORE & Brave need a key. Wrap them so the explanatory tooltip still shows
+        # while the checkbox is greyed out (a disabled checkbox passes mouse
+        # events — and thus its tooltip — through to its parent).
+        self.src_core = QCheckBox("CORE")
+        self._core_wrap = self._wrap_gated(self.src_core); qs2.addWidget(self._core_wrap)
         qs2.addStretch()
-        self.src_brave = QCheckBox("Brave"); self.src_brave.setChecked(True); qs2.addWidget(self.src_brave)
+        self.src_brave = QCheckBox("Brave"); self.src_brave.setChecked(True)
+        self._brave_wrap = self._wrap_gated(self.src_brave); qs2.addWidget(self._brave_wrap)
         qs2.addStretch()
         self.src_duckduckgo = QCheckBox("DuckDuckGo"); self.src_duckduckgo.setChecked(True); qs2.addWidget(self.src_duckduckgo)
         qs2.addStretch()
@@ -174,7 +179,7 @@ class SettingsTab(QWidget):
         hb_def = QHBoxLayout(); hb_def.setSpacing(4)
         hb_def.addWidget(self.grp_def, 1)
         self.btn_set_keys = QPushButton("\U0001F511\nSet Keys")
-        self.btn_set_keys.setObjectName("btn_download")  # teal — distinct from green Save
+        self.btn_set_keys.setObjectName("btn_search")  # blue — distinct from green Save
         self.btn_set_keys.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.btn_set_keys.setFixedWidth(88)
         self.btn_set_keys.setCursor(Qt.PointingHandCursor)
@@ -245,20 +250,31 @@ class SettingsTab(QWidget):
             self.lbl_status.setText(f"Error: {e}")
             QMessageBox.warning(self, "LLM Error", str(e))
 
+    @staticmethod
+    def _wrap_gated(checkbox):
+        """Wrap a checkbox so its tooltip still shows when it is disabled."""
+        w = QWidget()
+        lay = QHBoxLayout(w); lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(0)
+        lay.addWidget(checkbox)
+        return w
+
     def _update_source_enables(self):
         # Providers that require a key are greyed + non-selectable until the key
         # is set via the Set Keys dialog.
-        self._gate_keyed_source(self.src_brave, "brave_api_key", "")
-        self._gate_keyed_source(self.src_core, "core_api_key", self._pending_tip)
+        self._gate_keyed_source(self.src_brave, self._brave_wrap, "brave_api_key", "")
+        self._gate_keyed_source(self.src_core, self._core_wrap, "core_api_key", self._pending_tip)
 
-    def _gate_keyed_source(self, checkbox, cfg_key, enabled_tip):
+    def _gate_keyed_source(self, checkbox, wrapper, cfg_key, enabled_tip):
         has_key = bool(self.cfg.get(cfg_key, "").strip())
         checkbox.setEnabled(has_key)
         if has_key:
-            checkbox.setToolTip(enabled_tip)
+            tip = enabled_tip
         else:
             checkbox.setChecked(False)
-            checkbox.setToolTip("API key required — add it via the Set Keys button")
+            tip = "API key required — add it via the Set Keys button"
+        # Tooltip on the wrapper so it shows even while the checkbox is greyed.
+        wrapper.setToolTip(tip)
+        checkbox.setToolTip(tip)
 
     # ── API Keys dialog ──
 
