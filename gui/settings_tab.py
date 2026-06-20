@@ -111,7 +111,8 @@ class SettingsTab(QWidget):
         layout.addLayout(hb1)
 
         self.grp_def = QGroupBox("Query Defaults")
-        gs = QVBoxLayout(self.grp_def); gs.setSpacing(4); gs.setContentsMargins(8,4,8,2)
+        # Taller group with symmetric top/bottom padding (was 4/2 — uneven).
+        gs = QVBoxLayout(self.grp_def); gs.setSpacing(9); gs.setContentsMargins(8,12,8,12)
 
         qp = QHBoxLayout(); qp.setSpacing(6)
         qp.addWidget(QLabel("After date:"))
@@ -171,13 +172,17 @@ class SettingsTab(QWidget):
         hb_def = QHBoxLayout(); hb_def.setSpacing(4)
         hb_def.addWidget(self.grp_def, 1)
         self.btn_set_keys = QPushButton("\U0001F511\nSet Keys")
-        self.btn_set_keys.setObjectName("btn_discover")  # purple — distinct from green Save
+        self.btn_set_keys.setObjectName("btn_download")  # teal — distinct from green Save
         self.btn_set_keys.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.btn_set_keys.setFixedWidth(88)
         self.btn_set_keys.setCursor(Qt.PointingHandCursor)
         self.btn_set_keys.setToolTip("Enter all LLM and search-provider API keys")
         self.btn_set_keys.clicked.connect(self._open_keys_dialog)
-        hb_def.addWidget(self.btn_set_keys)
+        # Offset past the group's title line so the button's top/bottom align with
+        # the group's frame box rather than overhanging it at the top.
+        btn_wrap = QVBoxLayout(); btn_wrap.setContentsMargins(0, 11, 0, 3)
+        btn_wrap.addWidget(self.btn_set_keys)
+        hb_def.addLayout(btn_wrap)
         layout.addLayout(hb_def)
 
     # ── Provider / Model ──
