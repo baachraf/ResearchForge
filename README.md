@@ -272,7 +272,7 @@ If you want to modify the source code and rebuild a standalone `.exe`, use:
 build_exe.bat
 ```
 
-This runs Nuitka with `--onefile` to produce `C:\ResearchForge_build\ResearchForge.exe`. Requires Python 3.11 and Visual Studio Build Tools 2022.
+This runs Nuitka with `--onefile` to produce `D:\ResearchForge_build\ResearchForge.exe`. Requires Python 3.11 and Visual Studio Build Tools 2022.
 
 ## License
 
