@@ -287,7 +287,8 @@ QPushButton#btn_process:disabled {
 
 /* ═══  BUTTONS — DANGER / STOP  ════════════════════════════════ */
 
-QPushButton#btn_stop {
+QPushButton#btn_stop,
+QPushButton#btn_delete {
     background: ${danger};
     color: ${text_inverse};
     border: none;
@@ -296,7 +297,8 @@ QPushButton#btn_stop {
     font-weight: 600;
     font-size: 12px;
 }
-QPushButton#btn_stop:hover {
+QPushButton#btn_stop:hover,
+QPushButton#btn_delete:hover {
     background: ${danger_hover};
 }
 

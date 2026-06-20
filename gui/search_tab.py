@@ -476,7 +476,7 @@ class SearchDownloadTab(QWidget):
         self.btn_sel_all = QPushButton("Deselect All")
         self.btn_sel_all.clicked.connect(self._select_all_queries)
         btn_remove_query = QPushButton("✕ Remove")
-        btn_remove_query.setObjectName("btn_remove")
+        btn_remove_query.setObjectName("btn_delete")  # filled red
         btn_remove_query.clicked.connect(self._remove_query)
         self.btn_search = QPushButton("▶ Search")
         self.btn_search.setObjectName("btn_search")
@@ -705,6 +705,10 @@ class SearchDownloadTab(QWidget):
         self.btn_download_selected.setObjectName("btn_download")
         self.btn_download_selected.setToolTip("Download only the papers you checked in the table")
         self.btn_download_selected.clicked.connect(lambda: self._on_download(selected_only=True))
+        self.btn_delete_selected = QPushButton("\U0001f5d1 Delete")
+        self.btn_delete_selected.setObjectName("btn_delete")  # filled red
+        self.btn_delete_selected.setToolTip("Remove the checked papers from the search results (does not delete downloaded files)")
+        self.btn_delete_selected.clicked.connect(self._on_delete_selected)
         self.btn_download_by_score = QPushButton("\u2b07 Score")
         self.btn_download_by_score.setObjectName("btn_download")
         self.btn_download_by_score.setToolTip("Download all papers above Min Score regardless of title filter")
@@ -771,6 +775,7 @@ class SearchDownloadTab(QWidget):
         self.dl_status.setObjectName("dl_status")
 
         hb_dl_btns.addWidget(self.btn_download_selected)
+        hb_dl_btns.addWidget(self.btn_delete_selected)
         hb_dl_btns.addWidget(self.btn_download_by_score)
         hb_dl_btns.addWidget(self.btn_download_all)
 
@@ -2221,6 +2226,35 @@ class SearchDownloadTab(QWidget):
 
     def _get_output_root(self) -> str:
         return self._session_root()
+
+    def _on_delete_selected(self):
+        """Remove the checked papers from the search results (list only — keeps files)."""
+        if hasattr(self, '_current_dl_worker') and self._current_dl_worker and self._current_dl_worker.isRunning():
+            QMessageBox.information(self, "Busy", "Wait for the current download to finish.")
+            return
+        to_delete = []
+        for row in range(self.results_table.rowCount()):
+            item = self.results_table.item(row, 0)
+            if item and item.checkState() == Qt.Checked and row < len(self._search_results):
+                to_delete.append(self._search_results[row])
+        if not to_delete:
+            QMessageBox.information(self, "Nothing Selected", "Check the papers you want to remove first.")
+            return
+        reply = QMessageBox.question(
+            self, "Remove Results",
+            f"Remove {len(to_delete)} selected paper(s) from the search results?\n\n"
+            "This only clears them from the list — any already-downloaded files are kept.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        doomed = {id(p) for p in to_delete}
+        self._search_results = [p for p in self._search_results if id(p) not in doomed]
+        self._populate_results_table()
+        self._update_result_count()
+        self._apply_filters()
+        self._session_save()
+        self.log.emit(f"Removed {len(to_delete)} paper(s) from results")
 
     def _on_download(self, selected_only: bool = True, by_score: bool = False):
         if hasattr(self, '_current_dl_worker') and self._current_dl_worker and self._current_dl_worker.isRunning():
