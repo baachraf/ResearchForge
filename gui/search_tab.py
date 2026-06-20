@@ -546,13 +546,16 @@ class SearchDownloadTab(QWidget):
         self._source_menu = QMenu()
         self._source_menu.aboutToShow.connect(self._sync_source_menu)
         has_brave = bool(self.cfg.get("brave_api_key", ""))
-        for src_name in ["arXiv", "Sem. Scholar", "DuckGo", "Brave", "PubMed", "Local"]:
+        has_core = bool(self.cfg.get("core_api_key", ""))
+        _key_gated = {"Brave": has_brave, "CORE": has_core}
+        for src_name in ["arXiv", "OpenAlex", "Crossref", "Europe PMC", "DOAJ",
+                         "Sem. Scholar", "PubMed", "CORE", "Brave", "DuckGo", "Local"]:
             action = self._source_menu.addAction(src_name)
             action.setCheckable(True)
-            if src_name == "Brave" and not has_brave:
+            if src_name in _key_gated and not _key_gated[src_name]:
                 action.setChecked(False)
                 action.setEnabled(False)
-                action.setToolTip("Brave API key not set — configure in Settings tab")
+                action.setToolTip(f"{src_name} API key not set — configure in the Settings tab")
             else:
                 action.setChecked(True)
             action.toggled.connect(lambda _, a=src_name: self._on_source_toggle(a))
@@ -1625,7 +1628,10 @@ class SearchDownloadTab(QWidget):
         self.results_table.setItem(row, 1, title_item)
 
         src_raw = paper.get("source", "")
-        src_display = {"Web": "DuckGo", "SemanticScholar": "Sem. Scholar", "Local": "Local"}.get(src_raw, src_raw)
+        src_display = {
+            "Web": "DuckGo", "SemanticScholar": "Sem. Scholar", "Local": "Local",
+            "EuropePMC": "Europe PMC", "europe_pmc": "Europe PMC",
+        }.get(src_raw, src_raw)
         if paper.get("pinned"):
             src_display = f"📌 {src_display}"
         src_item = QTableWidgetItem(src_display)

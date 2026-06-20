@@ -111,6 +111,7 @@ class SettingsTab(QWidget):
         layout.addLayout(hb1)
 
         self.grp_def = QGroupBox("Query Defaults")
+        self.grp_def.setMinimumHeight(120)  # consistent default height
         # Tight group: no extra top/bottom padding, rows sit close together.
         gs = QVBoxLayout(self.grp_def); gs.setSpacing(6); gs.setContentsMargins(8,1,8,1)
 
@@ -137,6 +138,7 @@ class SettingsTab(QWidget):
         gs.addLayout(qp)
 
         _PENDING = "Backend wiring pending — will be searched once implemented"
+        self._pending_tip = _PENDING
 
         # Row 1 — implemented + new keyless providers
         qs = QHBoxLayout(); qs.setSpacing(6)
@@ -244,10 +246,19 @@ class SettingsTab(QWidget):
             QMessageBox.warning(self, "LLM Error", str(e))
 
     def _update_source_enables(self):
-        has_brave = bool(self.cfg.get("brave_api_key", "").strip())
-        self.src_brave.setEnabled(has_brave)
-        if not has_brave:
-            self.src_brave.setChecked(False)
+        # Providers that require a key are greyed + non-selectable until the key
+        # is set via the Set Keys dialog.
+        self._gate_keyed_source(self.src_brave, "brave_api_key", "")
+        self._gate_keyed_source(self.src_core, "core_api_key", self._pending_tip)
+
+    def _gate_keyed_source(self, checkbox, cfg_key, enabled_tip):
+        has_key = bool(self.cfg.get(cfg_key, "").strip())
+        checkbox.setEnabled(has_key)
+        if has_key:
+            checkbox.setToolTip(enabled_tip)
+        else:
+            checkbox.setChecked(False)
+            checkbox.setToolTip("API key required — add it via the Set Keys button")
 
     # ── API Keys dialog ──
 
