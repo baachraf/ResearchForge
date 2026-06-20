@@ -910,6 +910,10 @@ class SearchDownloadTab(QWidget):
             self._renumber_visible_rows()
             self.log.emit(f"Added {len(direct_papers)} directly-resolved paper(s) to results")
 
+        # A brand-new session starts with a clean Audit tab — otherwise the
+        # previous session's audit lingers and gets saved into this new one.
+        if self._audit_tab is not None:
+            self._audit_tab.set_session_data({})
         self._session_save()
         self.lbl_session.setText(f"Session: {result['name']}")
         self.log.emit(f"Created session: {result['name']} ({len(result['queries'])} queries)")
