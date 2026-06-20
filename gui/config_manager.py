@@ -40,6 +40,7 @@ DEFAULT_SETTINGS = {
     "brave_api_key": "",
     "semantic_scholar_api_key": "",
     "core_api_key": "",
+    "pubmed_api_key": "",
     "pubmed_email": "",
     "contact_email": "",
     "deepseek_api_key": "",
