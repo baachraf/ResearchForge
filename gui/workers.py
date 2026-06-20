@@ -32,6 +32,11 @@ from research_downloader.sources.semantic_scholar_source import SemanticScholarS
 from research_downloader.sources.web_source import WebSource
 from research_downloader.sources.brave_source import BraveSource
 from research_downloader.sources.pubmed_source import PubMedSource
+from research_downloader.sources.openalex_source import OpenAlexSource
+from research_downloader.sources.crossref_source import CrossRefSource
+from research_downloader.sources.europe_pmc_source import EuropePmcSource
+from research_downloader.sources.doaj_source import DoajSource
+from research_downloader.sources.core_source import CoreSource
 from research_downloader.relevance_filter import (
     passes_title_filter,
     passes_content_filter,
@@ -212,6 +217,17 @@ class SearchWorker(QThread):
             if pubmed_creds.get("enabled", True):
                 available_sources["pubmed"] = PubMedSource(credentials=pubmed_creds)
 
+            # New providers. Keyless ones are always available; CORE needs a key.
+            # The loop below only runs those present in sources_to_use.
+            contact_email = self.credentials.get("contact_email", "")
+            available_sources["openalex"] = OpenAlexSource(credentials={"email": contact_email})
+            available_sources["crossref"] = CrossRefSource(credentials={"email": contact_email})
+            available_sources["europe_pmc"] = EuropePmcSource(credentials={"email": contact_email})
+            available_sources["doaj"] = DoajSource()
+            core_creds = self.credentials.get("core", {})
+            if core_creds.get("api_key"):
+                available_sources["core"] = CoreSource(credentials={"api_key": core_creds["api_key"]})
+
             print(f"[DEBUG] avail={list(available_sources.keys())}", flush=True)
 
             for source_name, source_obj in available_sources.items():
@@ -250,6 +266,8 @@ class SearchWorker(QThread):
                     time.sleep(3.0)
                 elif source_name == "semantic_scholar":
                     time.sleep(1.5)
+                elif source_name in ("openalex", "crossref", "europe_pmc", "doaj", "core"):
+                    time.sleep(0.4)
 
             print(f"[DEBUG] DONE: total={len(all_results)}", flush=True)
             self.finished.emit()

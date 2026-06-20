@@ -136,21 +136,20 @@ class SettingsTab(QWidget):
         qp.addWidget(self.force_plus)
         gs.addLayout(qp)
 
-        _PENDING = "Backend wiring pending — will be searched once implemented"
-        self._pending_tip = _PENDING
+        _KEYLESS = "Free — no API key needed"
 
         # Row 1 — implemented + new keyless providers
         qs = QHBoxLayout(); qs.setSpacing(6)
         lbl_src = QLabel("Sources:"); lbl_src.setFixedWidth(55); qs.addWidget(lbl_src)
         self.src_arxiv = QCheckBox("arXiv"); self.src_arxiv.setChecked(True); qs.addWidget(self.src_arxiv)
         qs.addStretch()
-        self.src_openalex = QCheckBox("OpenAlex"); self.src_openalex.setToolTip(_PENDING); qs.addWidget(self.src_openalex)
+        self.src_openalex = QCheckBox("OpenAlex"); self.src_openalex.setToolTip(_KEYLESS); qs.addWidget(self.src_openalex)
         qs.addStretch()
-        self.src_crossref = QCheckBox("Crossref"); self.src_crossref.setToolTip(_PENDING); qs.addWidget(self.src_crossref)
+        self.src_crossref = QCheckBox("Crossref"); self.src_crossref.setToolTip(_KEYLESS); qs.addWidget(self.src_crossref)
         qs.addStretch()
-        self.src_europepmc = QCheckBox("Europe PMC"); self.src_europepmc.setToolTip(_PENDING); qs.addWidget(self.src_europepmc)
+        self.src_europepmc = QCheckBox("Europe PMC"); self.src_europepmc.setToolTip(_KEYLESS); qs.addWidget(self.src_europepmc)
         qs.addStretch()
-        self.src_doaj = QCheckBox("DOAJ"); self.src_doaj.setToolTip(_PENDING); qs.addWidget(self.src_doaj)
+        self.src_doaj = QCheckBox("DOAJ"); self.src_doaj.setToolTip(_KEYLESS); qs.addWidget(self.src_doaj)
         qs.addStretch()
         gs.addLayout(qs)
 
@@ -264,7 +263,7 @@ class SettingsTab(QWidget):
         # Providers that require a key are greyed + non-selectable until the key
         # is set via the Set Keys dialog.
         self._gate_keyed_source(self.src_brave, self._brave_wrap, "brave_api_key", "")
-        self._gate_keyed_source(self.src_core, self._core_wrap, "core_api_key", self._pending_tip)
+        self._gate_keyed_source(self.src_core, self._core_wrap, "core_api_key", "")
 
     def _gate_keyed_source(self, checkbox, wrapper, cfg_key, enabled_tip):
         has_key = bool(self.cfg.get(cfg_key, "").strip())

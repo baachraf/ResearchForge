@@ -1440,7 +1440,13 @@ class SearchDownloadTab(QWidget):
                 "enabled": True,
             },
             "arxiv": {"enabled": True},
-            "pubmed": {"enabled": True},
+            "pubmed": {
+                "api_key": self.cfg.get("pubmed_api_key", ""),
+                "email": self.cfg.get("contact_email", ""),
+                "enabled": True,
+            },
+            "core": {"api_key": self.cfg.get("core_api_key", ""), "enabled": True},
+            "contact_email": self.cfg.get("contact_email", ""),
         }
         self._search_creds = creds
         live_sources = self.cfg.get("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
