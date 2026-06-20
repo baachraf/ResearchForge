@@ -135,31 +135,31 @@ class SettingsTab(QWidget):
         qp.addWidget(self.force_plus)
         gs.addLayout(qp)
 
-        _COMING = "Coming soon — provider backend not yet wired"
+        _PENDING = "Backend wiring pending — will be searched once implemented"
 
         # Row 1 — implemented + new keyless providers
         qs = QHBoxLayout(); qs.setSpacing(6)
         lbl_src = QLabel("Sources:"); lbl_src.setFixedWidth(55); qs.addWidget(lbl_src)
         self.src_arxiv = QCheckBox("arXiv"); self.src_arxiv.setChecked(True); qs.addWidget(self.src_arxiv)
         qs.addStretch()
-        self.src_openalex = QCheckBox("OpenAlex"); self.src_openalex.setEnabled(False); self.src_openalex.setToolTip(_COMING); qs.addWidget(self.src_openalex)
+        self.src_openalex = QCheckBox("OpenAlex"); self.src_openalex.setToolTip(_PENDING); qs.addWidget(self.src_openalex)
         qs.addStretch()
-        self.src_crossref = QCheckBox("Crossref"); self.src_crossref.setEnabled(False); self.src_crossref.setToolTip(_COMING); qs.addWidget(self.src_crossref)
+        self.src_crossref = QCheckBox("Crossref"); self.src_crossref.setToolTip(_PENDING); qs.addWidget(self.src_crossref)
         qs.addStretch()
-        self.src_europepmc = QCheckBox("Europe PMC"); self.src_europepmc.setEnabled(False); self.src_europepmc.setToolTip(_COMING); qs.addWidget(self.src_europepmc)
+        self.src_europepmc = QCheckBox("Europe PMC"); self.src_europepmc.setToolTip(_PENDING); qs.addWidget(self.src_europepmc)
         qs.addStretch()
-        self.src_doaj = QCheckBox("DOAJ"); self.src_doaj.setEnabled(False); self.src_doaj.setToolTip(_COMING); qs.addWidget(self.src_doaj)
+        self.src_doaj = QCheckBox("DOAJ"); self.src_doaj.setToolTip(_PENDING); qs.addWidget(self.src_doaj)
         qs.addStretch()
         gs.addLayout(qs)
 
-        # Row 2 — remaining implemented + CORE (keyed, pending backend)
+        # Row 2 — remaining implemented + CORE (keyed, backend pending)
         qs2 = QHBoxLayout(); qs2.setSpacing(6)
         lbl_pad = QLabel(""); lbl_pad.setFixedWidth(55); qs2.addWidget(lbl_pad)
         self.src_pubmed = QCheckBox("PubMed"); self.src_pubmed.setChecked(True); qs2.addWidget(self.src_pubmed)
         qs2.addStretch()
         self.src_s2 = QCheckBox("Semantic Scholar"); self.src_s2.setChecked(True); qs2.addWidget(self.src_s2)
         qs2.addStretch()
-        self.src_core = QCheckBox("CORE"); self.src_core.setEnabled(False); self.src_core.setToolTip(_COMING); qs2.addWidget(self.src_core)
+        self.src_core = QCheckBox("CORE"); self.src_core.setToolTip(_PENDING); qs2.addWidget(self.src_core)
         qs2.addStretch()
         self.src_brave = QCheckBox("Brave"); self.src_brave.setChecked(True); qs2.addWidget(self.src_brave)
         qs2.addStretch()
@@ -171,9 +171,9 @@ class SettingsTab(QWidget):
         hb_def = QHBoxLayout(); hb_def.setSpacing(4)
         hb_def.addWidget(self.grp_def, 1)
         self.btn_set_keys = QPushButton("\U0001F511\nSet Keys")
-        self.btn_set_keys.setObjectName("btn_save")
+        self.btn_set_keys.setObjectName("btn_discover")  # purple — distinct from green Save
         self.btn_set_keys.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self.btn_set_keys.setFixedWidth(110)
+        self.btn_set_keys.setFixedWidth(88)
         self.btn_set_keys.setCursor(Qt.PointingHandCursor)
         self.btn_set_keys.setToolTip("Enter all LLM and search-provider API keys")
         self.btn_set_keys.clicked.connect(self._open_keys_dialog)
@@ -305,6 +305,11 @@ class SettingsTab(QWidget):
         self.src_duckduckgo.setChecked("duckduckgo" in sources or "web" in sources)
         self.src_brave.setChecked("brave" in sources)
         self.src_pubmed.setChecked("pubmed" in sources)
+        self.src_openalex.setChecked("openalex" in sources)
+        self.src_crossref.setChecked("crossref" in sources)
+        self.src_europepmc.setChecked("europe_pmc" in sources)
+        self.src_doaj.setChecked("doaj" in sources)
+        self.src_core.setChecked("core" in sources)
         self._update_source_enables()
 
         def _save_sources():
@@ -314,9 +319,16 @@ class SettingsTab(QWidget):
             if self.src_duckduckgo.isChecked(): srcs.append("web")
             if self.src_brave.isChecked(): srcs.append("brave")
             if self.src_pubmed.isChecked(): srcs.append("pubmed")
+            if self.src_openalex.isChecked(): srcs.append("openalex")
+            if self.src_crossref.isChecked(): srcs.append("crossref")
+            if self.src_europepmc.isChecked(): srcs.append("europe_pmc")
+            if self.src_doaj.isChecked(): srcs.append("doaj")
+            if self.src_core.isChecked(): srcs.append("core")
             self.cfg.set("default_sources", srcs)
 
-        for cb in [self.src_arxiv, self.src_s2, self.src_duckduckgo, self.src_brave, self.src_pubmed]:
+        for cb in [self.src_arxiv, self.src_s2, self.src_duckduckgo, self.src_brave,
+                   self.src_pubmed, self.src_openalex, self.src_crossref,
+                   self.src_europepmc, self.src_doaj, self.src_core]:
             cb.toggled.connect(_save_sources)
 
     def _save_to_config(self):
@@ -347,6 +359,16 @@ class SettingsTab(QWidget):
             sources.append("brave")
         if self.src_pubmed.isChecked():
             sources.append("pubmed")
+        if self.src_openalex.isChecked():
+            sources.append("openalex")
+        if self.src_crossref.isChecked():
+            sources.append("crossref")
+        if self.src_europepmc.isChecked():
+            sources.append("europe_pmc")
+        if self.src_doaj.isChecked():
+            sources.append("doaj")
+        if self.src_core.isChecked():
+            sources.append("core")
         self.cfg.set("default_sources", sources)
 
     def _on_save(self):
