@@ -548,7 +548,7 @@ class SearchDownloadTab(QWidget):
         has_brave = bool(self.cfg.get("brave_api_key", ""))
         has_core = bool(self.cfg.get("core_api_key", ""))
         _key_gated = {"Brave": has_brave, "CORE": has_core}
-        for src_name in ["arXiv", "OpenAlex", "Crossref", "Europe PMC", "DOAJ",
+        for src_name in ["arXiv", "OpenAlex", "Crossref", "Europe PMC",
                          "Sem. Scholar", "PubMed", "CORE", "Brave", "DuckGo", "Local"]:
             action = self._source_menu.addAction(src_name)
             action.setCheckable(True)

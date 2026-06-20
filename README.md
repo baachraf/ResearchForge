@@ -10,7 +10,7 @@ Desktop application that searches academic paper databases, downloads PDFs, and 
 
 ## Features
 
-- **Multi-source search**: arXiv, OpenAlex, Crossref, Europe PMC, DOAJ, PubMed, Semantic Scholar, CORE, Brave, DuckDuckGo — ten providers, most needing no API key
+- **Multi-source search**: arXiv, OpenAlex, Crossref, Europe PMC, PubMed, Semantic Scholar, CORE, Brave, DuckDuckGo — nine providers, most needing no API key
 - **Session creator**: AI-enhanced research description with automatic query generation and "Analyze My Paper" mode
 - **Local PDF injection**: add your own PDFs or entire folders; they auto-participate in relevance scoring and download workflows
 - **Relevance scoring**: LLM rates each paper 0–100 against your research context, with keyword-based fallback
@@ -199,7 +199,6 @@ Upload your paper (PDF or `.tex`) and run a structured pre-submission self-audit
 | OpenAlex | — | OpenAlex works API (~250M records); optional contact email for the polite pool |
 | Crossref | — | Crossref DOI metadata (~150M records); optional contact email for the polite pool |
 | Europe PMC | — | Europe PMC biomedical literature + open full text |
-| DOAJ | — | Directory of Open Access Journals¹ |
 | PubMed | optional | NCBI PubMed via Entrez; optional API key + email raise the rate limit |
 | Semantic Scholar | optional | S2 academic graph API; optional key raises the rate limit |
 | CORE | required | CORE open-access aggregator (~290M records); needs a free API key |
@@ -207,8 +206,6 @@ Upload your paper (PDF or `.tex`) and run a structured pre-submission self-audit
 | DuckDuckGo | — | Web search fallback |
 
 All API keys (and the shared contact email) are entered via **Set Keys** on the Settings tab; keyless providers work out of the box. Providers that need a key stay greyed-out until the key is set.
-
-¹ DOAJ's public API is sometimes gated behind a Cloudflare challenge; when that happens it returns no results rather than erroring, and may be unavailable from some networks.
 
 ### `config/`: Bundled defaults
 

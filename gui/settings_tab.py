@@ -149,8 +149,6 @@ class SettingsTab(QWidget):
         qs.addStretch()
         self.src_europepmc = QCheckBox("Europe PMC"); self.src_europepmc.setToolTip(_KEYLESS); qs.addWidget(self.src_europepmc)
         qs.addStretch()
-        self.src_doaj = QCheckBox("DOAJ"); self.src_doaj.setToolTip(_KEYLESS); qs.addWidget(self.src_doaj)
-        qs.addStretch()
         gs.addLayout(qs)
 
         # Row 2 — remaining implemented + CORE (keyed, backend pending)
@@ -341,7 +339,6 @@ class SettingsTab(QWidget):
         self.src_openalex.setChecked("openalex" in sources)
         self.src_crossref.setChecked("crossref" in sources)
         self.src_europepmc.setChecked("europe_pmc" in sources)
-        self.src_doaj.setChecked("doaj" in sources)
         self.src_core.setChecked("core" in sources)
         self._update_source_enables()
 
@@ -355,13 +352,12 @@ class SettingsTab(QWidget):
             if self.src_openalex.isChecked(): srcs.append("openalex")
             if self.src_crossref.isChecked(): srcs.append("crossref")
             if self.src_europepmc.isChecked(): srcs.append("europe_pmc")
-            if self.src_doaj.isChecked(): srcs.append("doaj")
             if self.src_core.isChecked(): srcs.append("core")
             self.cfg.set("default_sources", srcs)
 
         for cb in [self.src_arxiv, self.src_s2, self.src_duckduckgo, self.src_brave,
                    self.src_pubmed, self.src_openalex, self.src_crossref,
-                   self.src_europepmc, self.src_doaj, self.src_core]:
+                   self.src_europepmc, self.src_core]:
             cb.toggled.connect(_save_sources)
 
     def _save_to_config(self):
@@ -398,8 +394,6 @@ class SettingsTab(QWidget):
             sources.append("crossref")
         if self.src_europepmc.isChecked():
             sources.append("europe_pmc")
-        if self.src_doaj.isChecked():
-            sources.append("doaj")
         if self.src_core.isChecked():
             sources.append("core")
         self.cfg.set("default_sources", sources)
@@ -474,7 +468,7 @@ class KeysDialog(QDialog):
 
     Reads from / writes to the shared ConfigManager so the rest of the app keeps
     using the same cfg keys it always has. Keyless providers (OpenAlex, Crossref,
-    Europe PMC, DOAJ) need no entry here.
+    Europe PMC) need no entry here.
     """
 
     # (cfg_key, label, is_password, hint)
@@ -514,7 +508,7 @@ class KeysDialog(QDialog):
         layout.addWidget(grp_search)
 
         info = QLabel(
-            "OpenAlex, Crossref, Europe PMC and DOAJ need no key. "
+            "OpenAlex, Crossref and Europe PMC need no key. "
             "Contact email is shared — used for PubMed and the OpenAlex/Crossref/"
             "Europe PMC “polite pool” rate limits."
         )
