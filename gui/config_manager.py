@@ -41,7 +41,6 @@ DEFAULT_SETTINGS = {
     "semantic_scholar_api_key": "",
     "core_api_key": "",
     "pubmed_api_key": "",
-    "pubmed_email": "",
     "contact_email": "",
     "deepseek_api_key": "",
     "gemini_api_key": "",

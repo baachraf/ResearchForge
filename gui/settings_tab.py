@@ -418,7 +418,7 @@ class SettingsTab(QWidget):
             self.model_combo.clear()
             for k in ("deepseek_api_key", "gemini_api_key", "brave_api_key",
                       "semantic_scholar_api_key", "core_api_key",
-                      "pubmed_api_key", "pubmed_email", "contact_email"):
+                      "pubmed_api_key", "contact_email"):
                 self.cfg.set(k, "")
             self.output_root.clear()
             self.summary_output_dir.clear()
@@ -488,7 +488,6 @@ class KeysDialog(QDialog):
         ("core_api_key", "CORE:", True, "required"),
         ("semantic_scholar_api_key", "Semantic Scholar:", True, "optional"),
         ("pubmed_api_key", "PubMed key:", True, "optional"),
-        ("pubmed_email", "PubMed email:", False, "optional"),
         ("contact_email", "Contact email:", False, "optional"),
     ]
 
@@ -517,7 +516,8 @@ class KeysDialog(QDialog):
 
         info = QLabel(
             "OpenAlex, Crossref, Europe PMC and DOAJ need no key. "
-            "Contact email is used for their “polite pool” rate limits."
+            "Contact email is shared — used for PubMed and the OpenAlex/Crossref/"
+            "Europe PMC “polite pool” rate limits."
         )
         info.setWordWrap(True)
         info.setObjectName("sc_hint")
