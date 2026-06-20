@@ -111,8 +111,8 @@ class SettingsTab(QWidget):
         layout.addLayout(hb1)
 
         self.grp_def = QGroupBox("Query Defaults")
-        # Taller group with symmetric top/bottom padding (was 4/2 — uneven).
-        gs = QVBoxLayout(self.grp_def); gs.setSpacing(9); gs.setContentsMargins(8,12,8,12)
+        # Tight group: no extra top/bottom padding, rows sit close together.
+        gs = QVBoxLayout(self.grp_def); gs.setSpacing(6); gs.setContentsMargins(8,1,8,1)
 
         qp = QHBoxLayout(); qp.setSpacing(6)
         qp.addWidget(QLabel("After date:"))
