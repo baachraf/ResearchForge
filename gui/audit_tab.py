@@ -1053,9 +1053,11 @@ class AuditTab(QWidget):
 
     def _load_audit(self):
         """Load a saved audit bundle (.json) into the tab — independent of any session."""
+        # Always open the dialog in the audit folder (create it if it doesn't
+        # exist yet) so loading lands directly where audits are saved.
         audit_dir = _resolve_audit_dir(self.cfg)
-        start = str(audit_dir) if audit_dir.exists() else ""
-        path, _ = QFileDialog.getOpenFileName(self, "Load Audit", start, "Audit bundle (*.json)")
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(self, "Load Audit", str(audit_dir), "Audit bundle (*.json)")
         if not path:
             return
         try:
