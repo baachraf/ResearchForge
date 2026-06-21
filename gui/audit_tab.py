@@ -13,6 +13,7 @@ preserved, and there are no OCR or column-order artefacts.
 """
 import os
 import re
+import json
 import time
 from pathlib import Path
 from datetime import datetime
@@ -31,6 +32,7 @@ from gui.llm_provider import (
     create_llm_client, get_provider_api_key,
     ensure_llm_available, provider_name_from_config,
 )
+from gui.app_info import APP_VERSION
 
 def _detect_pdf_title(pdf_path: str) -> str:
     """Return the paper title from a PDF or LaTeX file.
@@ -837,8 +839,6 @@ class _QuestionsDialog(QDialog):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class AuditTab(QWidget):
-    session_save_requested = Signal()
-
     def __init__(self, cfg, log_signal: Signal, parent=None):
         super().__init__(parent)
         self.cfg      = cfg
@@ -971,9 +971,19 @@ class AuditTab(QWidget):
         self.save_name = QLineEdit()
         self.save_name.setPlaceholderText("auto-generated when audit completes")
         save_row.addWidget(self.save_name, 1)
-        self.btn_save = QPushButton("💾 Save Results")
+        self.btn_load = QPushButton("📂 Load")
+        self.btn_load.setToolTip("Load a previously saved audit (.json)")
+        self.btn_load.clicked.connect(self._load_audit)
+        save_row.addWidget(self.btn_load)
+        self.btn_save = QPushButton("💾 Save")
+        self.btn_save.setToolTip("Save this audit as a reusable .json bundle (plus a readable .md copy)")
         self.btn_save.clicked.connect(self._save_results)
         save_row.addWidget(self.btn_save)
+        self.btn_unload = QPushButton("🗑 Unload")
+        self.btn_unload.setObjectName("btn_delete")  # filled red
+        self.btn_unload.setToolTip("Clear the audit from this tab (saved files on disk are kept)")
+        self.btn_unload.clicked.connect(self._unload)
+        save_row.addWidget(self.btn_unload)
         layout.addLayout(save_row)
 
     # ── lifecycle ────────────────────────────────────────────────────────────
@@ -1014,12 +1024,16 @@ class AuditTab(QWidget):
         self._last_scores = scores
         self.score_panel.update_scores(scores)
 
+        self._questions_text = self.cfg.get("audit_last_questions", "")
+
         save_nm = self.cfg.get("audit_last_save_name", "")
         self.save_name.setText(save_nm)
 
         if not results:
             self.btn_questions.setEnabled(False)
             self.btn_questions.setText("❓ Author questions")
+        else:
+            self._apply_questions_button()
 
         # re-detect sections only if visible and not already done for this PDF
         if self.isVisible() and self._is_section_mode() and self._pdf_path and os.path.isfile(self._pdf_path):
@@ -1028,26 +1042,57 @@ class AuditTab(QWidget):
             elif self.section_panel.isHidden():
                 self.section_panel.show()
 
-    def get_session_data(self) -> dict:
-        """Return current audit state for inclusion in session save."""
-        return {
-            "pdf":       self._pdf_path,
-            "ctx_index": self._ctx_index(),
-            "results":   self.results_edit.toPlainText(),
-            "save_name": self.save_name.text(),
-            "scores":    self._last_scores,
-        }
+    def _apply_questions_button(self):
+        """Set the 'questions for author' button from self._questions_text."""
+        if self._questions_text:
+            n = len(re.findall(r'^\s*\[\d+\]', self._questions_text, re.MULTILINE)) or 1
+            self.btn_questions.setText(f"❓  {n} question{'s' if n != 1 else ''} for author")
+        else:
+            self.btn_questions.setText("✓  No questions for author")
+        self.btn_questions.setEnabled(True)
 
-    def set_session_data(self, data: dict):
-        """Restore audit state from a session dict. Pass {} to clear the tab."""
+    def _load_audit(self):
+        """Load a saved audit bundle (.json) into the tab — independent of any session."""
+        audit_dir = _resolve_audit_dir(self.cfg)
+        start = str(audit_dir) if audit_dir.exists() else ""
+        path, _ = QFileDialog.getOpenFileName(self, "Load Audit", start, "Audit bundle (*.json)")
+        if not path:
+            return
+        try:
+            bundle = json.loads(Path(path).read_text(encoding="utf-8"))
+            if not isinstance(bundle, dict) or "audit" not in bundle:
+                raise ValueError("This file is not a ResearchForge audit bundle.")
+            paper = bundle.get("paper", {}) or {}
+            audit = bundle.get("audit", {}) or {}
+            self.cfg.update({
+                "audit_last_pdf":           paper.get("path", "") or "",
+                "audit_last_context_index": audit.get("context_index", 0),
+                "audit_last_results":       audit.get("results", "") or "",
+                "audit_last_save_name":     os.path.splitext(os.path.basename(path))[0],
+                "audit_last_scores":        audit.get("scores", {}) or {},
+                "audit_last_questions":     audit.get("questions", "") or "",
+            })
+            self._paper_title = paper.get("title", "") or ""
+            self._restore_state()
+            self.log.emit(f"Audit loaded: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Load failed", f"Could not load audit:\n{e}")
+
+    def _unload(self):
+        """Clear the audit from the tab. Saved files on disk are untouched."""
         self.cfg.update({
-            "audit_last_pdf":           data.get("pdf", ""),
-            "audit_last_context_index": data.get("ctx_index", 0),
-            "audit_last_results":       data.get("results", ""),
-            "audit_last_save_name":     data.get("save_name", ""),
-            "audit_last_scores":        data.get("scores", {}),
+            "audit_last_pdf":           "",
+            "audit_last_context_index": 0,
+            "audit_last_results":       "",
+            "audit_last_save_name":     "",
+            "audit_last_scores":        {},
+            "audit_last_questions":     "",
         })
         self._paper_title = ""
+        self._questions_text = ""
+        self._last_scores = {}
+        self._sections = OrderedDict()
+        self.section_panel.hide()
         self._restore_state()
 
     def _ctx_index(self) -> int:
@@ -1061,14 +1106,15 @@ class AuditTab(QWidget):
         return self._ctx_values[idx] if idx >= 0 else None
 
     def _save_state(self):
+        # Tab-local persistence only — the audit is independent of any session.
         self.cfg.update({
             "audit_last_pdf":           self._pdf_path,
             "audit_last_context_index": self._ctx_index(),
             "audit_last_results":       self.results_edit.toPlainText(),
             "audit_last_save_name":     self.save_name.text(),
             "audit_last_scores":        self._last_scores,
+            "audit_last_questions":     self._questions_text,
         })
-        self.session_save_requested.emit()
 
     # ── PDF picking & section detection ─────────────────────────────────────
 
@@ -1218,14 +1264,7 @@ class AuditTab(QWidget):
         self.results_edit.verticalScrollBar().setValue(0)
         if self._last_scores:
             self.score_panel.update_scores(self._last_scores)
-        if self._questions_text:
-            n = len(re.findall(r'^\s*\[\d+\]', self._questions_text, re.MULTILINE))
-            n = n if n > 0 else 1
-            self.btn_questions.setText(
-                f"❓  {n} question{'s' if n != 1 else ''} for author")
-        else:
-            self.btn_questions.setText("✓  No questions for author")
-        self.btn_questions.setEnabled(True)
+        self._apply_questions_button()
         self.save_name.setText(_make_audit_filename(self._paper_title, "latex" if self._is_latex() else "pdf"))
         self._save_state()
 
@@ -1270,12 +1309,8 @@ class AuditTab(QWidget):
 
     # ── save results ─────────────────────────────────────────────────────────
 
-    def _save_results(self):
-        text = self.results_edit.toPlainText().strip()
-        if not text:
-            QMessageBox.information(self, "Nothing to save", "Run an audit first.")
-            return
-        # Header: source file and audit timestamp
+    def _render_markdown(self) -> str:
+        """Human-readable report (the .md copy saved alongside the .json bundle)."""
         src_label = "LaTeX source" if self._is_latex() else "PDF"
         src_name  = os.path.basename(self._pdf_path) if self._pdf_path else "unknown"
         header = (
@@ -1284,19 +1319,48 @@ class AuditTab(QWidget):
             f"**Date:** {datetime.now().strftime('%A, %d %B %Y  %H:%M')}\n\n"
             + "━" * 60 + "\n\n"
         )
-        text = header + text
+        text = header + self.results_edit.toPlainText().strip()
         if self._questions_text:
             sep = "\n\n" + "━" * 60
             text = (text
                     + sep + "\nQUESTIONS FOR THE AUTHOR\n" + "━" * 60 + "\n"
                     + self._questions_text.strip())
+        return text
+
+    def _save_results(self):
+        if not self.results_edit.toPlainText().strip():
+            QMessageBox.information(self, "Nothing to save", "Run or load an audit first.")
+            return
         audit_dir = _resolve_audit_dir(self.cfg)
         audit_dir.mkdir(parents=True, exist_ok=True)
-        name = self.save_name.text().strip() or datetime.now().strftime("%Y-%m-%d_audit")
-        if not name.endswith(".md"):
-            name += ".md"
-        out_path = audit_dir / name
-        out_path.write_text(text, encoding="utf-8")
-        self.log.emit(f"Audit saved: {out_path}")
-        QMessageBox.information(self, "Saved", f"Results saved to:\n{out_path}")
+        base = self.save_name.text().strip() or datetime.now().strftime("%Y-%m-%d_audit")
+        for ext in (".json", ".md"):
+            if base.lower().endswith(ext):
+                base = base[:-len(ext)]
+        # Canonical, reloadable bundle
+        bundle = {
+            "schema": "researchforge.audit/1",
+            "app_version": APP_VERSION,
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+            "paper": {
+                "name": os.path.basename(self._pdf_path) if self._pdf_path else "",
+                "path": self._pdf_path or "",
+                "source_type": "latex" if self._is_latex() else "pdf",
+                "title": self._paper_title or "",
+            },
+            "audit": {
+                "context_index": self._ctx_index(),
+                "model":    self.cfg.get("llm_model", ""),
+                "endpoint": self.cfg.get("llm_endpoint", ""),
+                "results":   self.results_edit.toPlainText(),
+                "scores":    self._last_scores,
+                "questions": self._questions_text,
+            },
+        }
+        json_path = audit_dir / (base + ".json")
+        md_path   = audit_dir / (base + ".md")
+        json_path.write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+        md_path.write_text(self._render_markdown(), encoding="utf-8")
+        self.log.emit(f"Audit saved: {json_path}")
+        QMessageBox.information(self, "Saved", f"Saved:\n{json_path}\n{md_path}")
         self._save_state()

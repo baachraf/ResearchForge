@@ -115,8 +115,7 @@ class MainWindow(QMainWindow):
         self.summarize_tab.session_save_requested.connect(self.search_tab._session_save)
         self.output_tab = OutputTab(self.cfg, self.log_signal)
         self.audit_tab = AuditTab(self.cfg, self.log_signal)
-        self.audit_tab.session_save_requested.connect(self.search_tab._session_save)
-        self.search_tab.set_audit_tab(self.audit_tab)
+        # Audit is independent of sessions — no cross-wiring.
         self.search_tab._load_last_session()
         self.logs_tab = LogsTab()
 

@@ -389,7 +389,6 @@ class SearchDownloadTab(QWidget):
         self._current_query_idx = 0
         self._pending_queries: list = []
         self._search_active = False
-        self._audit_tab = None
         self._session_manager = SessionManager()
         self._session_id = None
         self._session_context = ""
@@ -410,9 +409,6 @@ class SearchDownloadTab(QWidget):
         self._filter_timer.setInterval(150)
         self._filter_timer.timeout.connect(self._apply_filters)
         self._setup_ui()
-
-    def set_audit_tab(self, tab):
-        self._audit_tab = tab
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -910,10 +906,6 @@ class SearchDownloadTab(QWidget):
             self._renumber_visible_rows()
             self.log.emit(f"Added {len(direct_papers)} directly-resolved paper(s) to results")
 
-        # A brand-new session starts with a clean Audit tab — otherwise the
-        # previous session's audit lingers and gets saved into this new one.
-        if self._audit_tab is not None:
-            self._audit_tab.set_session_data({})
         self._session_save()
         self.lbl_session.setText(f"Session: {result['name']}")
         self.log.emit(f"Created session: {result['name']} ({len(result['queries'])} queries)")
@@ -1021,7 +1013,6 @@ class SearchDownloadTab(QWidget):
             "title_filter_enabled": self.title_filter_lbl.isChecked(),
             "source_filters": {name: act.isChecked() for name, act in self._source_filters.items()},
             "agentic_log": getattr(self, '_session_agentic_log', ""),
-            "audit": self._audit_tab.get_session_data() if self._audit_tab else {},
         }
         sid = self._session_id or f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self._session_id = sid
@@ -1211,8 +1202,6 @@ class SearchDownloadTab(QWidget):
             session_folder = re.sub(r'[\\/*?:"<>|]', '_', data.get("name", "session")) + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
             self.cfg.set("summary_session_folder", session_folder)
         self.cfg.set("session_download_name", re.sub(r'[\\/*?:"<>|]', '_', data.get("name", "session")))
-        if self._audit_tab is not None:
-            self._audit_tab.set_session_data(data.get("audit", {}))
         QTimer.singleShot(0, self._refresh_downloaded_tab)
 
     def _check_result_file(self, paper: dict) -> bool:
