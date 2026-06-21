@@ -16,7 +16,7 @@ Desktop application that searches academic paper databases, downloads PDFs, and 
 - **Relevance scoring**: LLM rates each paper 0–100 against your research context, with keyword-based fallback
 - **Automated PDF download**: batch download with duplicate detection and file validation
 - **Summarization pipeline**: per-paper analysis, topic synthesis, global synthesis, related work section, introduction draft
-- **Audit My Paper**: 10-dimension IEEE pre-submission self-audit on any PDF or LaTeX source — score panel, questions for the author, section-by-section mode
+- **Audit My Paper**: 10-dimension IEEE pre-submission self-audit on any PDF or LaTeX source — score panel, questions for the author, section-by-section mode; save/load standalone audit reports, independent of any session
 - **13 editable prompts**: customize every stage of the LLM pipeline
 - **Analysis lenses**: filter by similarity, novelty, methodology, research gaps
 - **Session management**: save, load, and resume research sessions
@@ -114,7 +114,7 @@ Use the title filter, source filters, and LLM relevance scoring to narrow result
 
 ### 3. Download
 
-Download selected papers as PDFs. Duplicates are automatically detected and invalid files are skipped. Three download modes: Selected, by Score threshold, or All visible.
+Download selected papers as PDFs. Duplicates are automatically detected and invalid files are skipped. Three download modes: Selected, by Score threshold, or All visible. Use **Delete** to remove the checked results from the list — prune a search and re-query without starting a new session (downloaded files are kept).
 
 ### 4. Summarize Pipeline
 
@@ -155,7 +155,8 @@ Upload your paper (PDF or `.tex`) and run a structured pre-submission self-audit
 - **Score panel**: visual `81/100` overall score + colored chip per dimension (green ≥80, amber 65–79, orange 40–64, red <40), computed from a weighted mean (Contributions ×1.5, Claims ×1.5, Reproducibility ×1.3, others ×1.0)
 - **Questions for the Author**: button shows how many genuine unanswered questions the LLM found — things whose answer is absent from the paper. Click to open the list in a dialog.
 - **Section inspector**: `[ inspect ]` link lets you preview the exact text of each detected section before running the audit
-- **Auto-saved filename**: `TitleSlug_DayName_DDMonYYYY_HHMMSS.md`
+- **Save / Load / Unload** *(session-independent)*: **Save** writes a self-contained `.json` bundle (paper, mode, report, scores, questions) plus a readable `.md` copy to the audit folder; **Load** reopens any saved `.json` back into the tab (report, score chips, questions, paper); **Unload** clears the tab (saved files are kept). The tab isn't tied to any research session and remembers your last audit across restarts.
+- **Auto-named files**: `TitleSlug_DayName_DDMonYYYY_HHMMSS`
 
 ---
 
