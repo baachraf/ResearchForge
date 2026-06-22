@@ -205,6 +205,19 @@ def rf_remove_query_from_session(session_id: str, query_index: int) -> dict:
 
 
 @mcp.tool()
+def rf_update_session(session_id: str, fields_json: str = "", append_log: str = "") -> dict:
+    """Update a session's working-state fields and save (GUI-loadable). Pass `fields_json`
+    as a JSON object with any of: context, intent, focus_keywords, avoid_topics,
+    score_threshold, scoring_depth, title_ok_only, title_filter_text,
+    title_filter_enabled, source_filters, summ_chk_similarity/novelty/methodology/gaps,
+    summ_selected_mode, paper_data, paper_path/pages/size_mb/titles/topic_name, name.
+    Queries/results have their own tools. `append_log` adds a timestamped line to the
+    session's agentic_log for a continuity trail."""
+    fields = json.loads(fields_json) if fields_json else {}
+    return _safe(rf.update_session(session_id, fields=fields, append_log=append_log))
+
+
+@mcp.tool()
 def rf_set_session_results(session_id: str, results_json: str,
                            query_key: str = "", append: bool = False) -> dict:
     """Register search results into a session so they show in the GUI results table.

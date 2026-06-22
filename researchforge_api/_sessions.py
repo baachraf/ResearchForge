@@ -217,6 +217,52 @@ def remove_query_from_session(session_id: str, query_index: int) -> Optional[dic
     return session
 
 
+# Session-level state the GUI persists in _session_save (besides queries/results,
+# which have their own dedicated tools). These are the fields an agent may update
+# to keep a session's working state in sync across MCP calls.
+_UPDATABLE_FIELDS = {
+    "name", "context", "intent", "focus_keywords", "avoid_topics",
+    "score_threshold", "scoring_depth",
+    "title_ok_only", "title_filter_text", "title_filter_enabled", "source_filters",
+    "summ_chk_similarity", "summ_chk_novelty", "summ_chk_methodology", "summ_chk_gaps",
+    "summ_selected_mode", "agentic_log",
+    "paper_data", "paper_path", "paper_pages", "paper_size_mb",
+    "paper_titles", "paper_topic_name",
+}
+
+
+def update_session(session_id: str, fields: Optional[dict] = None,
+                   append_log: str = "") -> dict:
+    """Update a session's working-state fields and save (GUI-loadable).
+
+    Persists the same per-session state the GUI's _session_save writes — context,
+    intent, keywords, scoring threshold/depth, title/source filters, analysis-lens
+    (summ_chk_*), own-paper analysis (paper_data), etc. Only known fields are
+    applied; queries/results have their own dedicated tools. ``append_log`` adds a
+    timestamped line to ``agentic_log`` for a human-readable continuity trail.
+    """
+    session = load_session(session_id)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
+    session = ensure_full_schema(session)
+
+    applied = []
+    for k, v in (fields or {}).items():
+        if k in _UPDATABLE_FIELDS:
+            session[k] = v
+            applied.append(k)
+
+    if append_log:
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        prev = session.get("agentic_log", "")
+        session["agentic_log"] = (prev + "\n" if prev else "") + f"[{stamp}] {append_log}"
+        if "agentic_log" not in applied:
+            applied.append("agentic_log")
+
+    save_session(session_id, session)
+    return {"session_id": session_id, "updated_fields": applied, "session": session}
+
+
 def set_session_results(session_id: str, results: list[dict],
                         query_key: str = "", append: bool = False) -> dict:
     """Register search results into a session in GUI-loadable form.

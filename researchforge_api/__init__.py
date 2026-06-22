@@ -44,6 +44,7 @@ from researchforge_api._prompts import list_prompts, get_prompt, set_prompt, res
 from researchforge_api._sessions import (
     list_sessions, load_session, save_session, delete_session,
     get_session_queries, add_query_to_session, remove_query_from_session, set_session_results,
+    update_session,
 )
 from researchforge_api._search import (
     search_papers as search, discover_endpoints, lookup_by_title, filter_papers,
@@ -67,6 +68,7 @@ __all__ = [
     "list_prompts", "get_prompt", "set_prompt", "reset_prompt", "reset_all_prompts",
     "list_sessions", "load_session", "save_session", "delete_session",
     "get_session_queries", "add_query_to_session", "remove_query_from_session", "set_session_results",
+    "update_session",
     "search", "discover_endpoints", "lookup_by_title", "filter_papers",
     "download_paper", "download_papers", "is_downloaded", "get_download_path",
     "list_downloads", "list_download_tree", "download_session", "refresh_session_downloads",
