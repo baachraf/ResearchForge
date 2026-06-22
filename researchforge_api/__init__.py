@@ -50,9 +50,9 @@ from researchforge_api._search import (
 )
 from researchforge_api._download import (
     download_paper, download_papers, is_downloaded, get_download_path,
-    list_downloads, list_download_tree,
+    list_downloads, list_download_tree, download_session, refresh_session_downloads,
 )
-from researchforge_api._score import score_papers
+from researchforge_api._score import score_papers, score_session
 from researchforge_api._analyze import (
     analyze_paper, analyze_own_paper, synthesize_topic, synthesize_global,
     generate_queries, enhance_research, generate_related_work, generate_introduction,
@@ -69,8 +69,8 @@ __all__ = [
     "get_session_queries", "add_query_to_session", "remove_query_from_session", "set_session_results",
     "search", "discover_endpoints", "lookup_by_title", "filter_papers",
     "download_paper", "download_papers", "is_downloaded", "get_download_path",
-    "list_downloads", "list_download_tree",
-    "score_papers",
+    "list_downloads", "list_download_tree", "download_session", "refresh_session_downloads",
+    "score_papers", "score_session",
     "analyze_paper", "analyze_own_paper", "synthesize_topic", "synthesize_global",
     "generate_queries", "enhance_research", "generate_related_work", "generate_introduction",
     "list_summaries", "get_cached_analysis", "run_full_pipeline", "create_session_full",

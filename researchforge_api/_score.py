@@ -3,6 +3,7 @@ import re
 import tempfile
 import requests
 import urllib3
+from typing import Optional
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from researchforge_api import _config, _llm, _prompts
@@ -195,3 +196,44 @@ def score_papers(
     except Exception:
         pass
     return results
+
+
+def score_session(session_id: str,
+                  paper_ids: Optional[list] = None,
+                  scoring_depth: int = 1,
+                  progress_callback=None) -> dict:
+    """Score a session's results against its own research context and persist the
+    scores onto the session (so a later reload keeps the ranking the GUI would).
+
+    Scores the session's result dicts in place using context/intent/keywords from
+    the session itself, then saves. ``paper_ids=None`` scores all results.
+    """
+    from researchforge_api import _sessions
+    session = _sessions.load_session(session_id)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
+    session = _sessions.ensure_full_schema(session)
+
+    results = session.get("results", [])
+    targets = [r for r in results
+               if paper_ids is None or r.get("id") in paper_ids]
+    if not targets:
+        return {"session_id": session_id, "scored": 0, "total": len(results)}
+
+    # score_papers mutates each dict in place; targets are references into
+    # session["results"], so scores propagate before we save.
+    score_papers(
+        targets,
+        research_context=session.get("context", ""),
+        intent=session.get("intent", ""),
+        focus_keywords=session.get("focus_keywords", ""),
+        avoid_topics=session.get("avoid_topics", ""),
+        scoring_depth=scoring_depth,
+        progress_callback=progress_callback,
+    )
+
+    _sessions.save_session(session_id, session)
+    scored = [{"id": r.get("id"), "title": r.get("title", ""),
+               "relevance_score": r.get("relevance_score")} for r in targets]
+    return {"session_id": session_id, "scored": len(targets),
+            "total": len(results), "results": scored}

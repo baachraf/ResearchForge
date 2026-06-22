@@ -272,6 +272,23 @@ def rf_download_papers(papers_json: str, output_dir: str = "") -> dict:
 
 
 @mcp.tool()
+def rf_download_session(session_id: str, paper_ids: list = None) -> dict:
+    """Download a session's registered results into the GUI folder layout
+    (output_root/<query name>/) and persist file_exists/file_path/file_size_mb
+    back onto the session. `paper_ids` limits which results to download (default: all).
+    Use this so a later session reload knows which PDFs are downloaded and where."""
+    return _safe(rf.download_session(session_id, paper_ids=paper_ids))
+
+
+@mcp.tool()
+def rf_refresh_session_downloads(session_id: str) -> dict:
+    """Re-sync a session's results with what is already on disk: recompute
+    file_exists/file_path/file_size_mb for every result and save. Call this when
+    resuming a session to recover download state."""
+    return _safe(rf.refresh_session_downloads(session_id))
+
+
+@mcp.tool()
 def rf_list_downloads(output_dir: str = "") -> list:
     """List all downloaded PDFs."""
     return _safe(rf.list_downloads(output_dir=output_dir))
@@ -302,6 +319,14 @@ def rf_score_papers(papers_json: str, research_context: str = "",
     return _safe(rf.score_papers(papers, research_context=research_context,
                                   intent=intent, focus_keywords=focus_keywords,
                                   avoid_topics=avoid_topics, scoring_depth=scoring_depth))
+
+
+@mcp.tool()
+def rf_score_session(session_id: str, paper_ids: list = None, scoring_depth: int = 1) -> dict:
+    """Score a session's registered results against its own research context and
+    persist relevance_score/score_reason back onto the session. `paper_ids` limits
+    which results to score (default: all). scoring_depth: 1=fast, 2=compare, 3=analyze."""
+    return _safe(rf.score_session(session_id, paper_ids=paper_ids, scoring_depth=scoring_depth))
 
 
 # ═══════════════════════════════════════════════════════════════

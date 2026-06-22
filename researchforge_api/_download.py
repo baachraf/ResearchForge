@@ -73,6 +73,103 @@ def download_papers(
     return results
 
 
+def _output_root() -> str:
+    return _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
+
+
+def _topic_dir(output_folder: str) -> str:
+    """Per-query topic folder, matching the GUI's output_root/<output_folder>/ layout."""
+    root = _output_root()
+    return os.path.join(root, output_folder) if output_folder else root
+
+
+def download_session(session_id: str,
+                     paper_ids: Optional[list] = None,
+                     max_size_mb: float = 100.0,
+                     skip_content_filter: bool = False,
+                     progress_callback=None) -> dict:
+    """Download a session's results into the GUI folder convention and persist state.
+
+    Each paper goes to ``output_root/<output_folder>/`` (output_folder = its query
+    name), then the matching session result is updated in place with
+    ``file_exists``/``file_path``/``file_size_mb`` and the session is saved — so a
+    later session reload sees exactly what is downloaded and where.
+    """
+    from researchforge_api import _sessions
+    session = _sessions.load_session(session_id)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
+    session = _sessions.ensure_full_schema(session)
+
+    results = session.get("results", [])
+    targets = [r for r in results
+               if paper_ids is None or r.get("id") in paper_ids]
+    summary = {"ok": [], "failed": [], "total": len(targets), "session_id": session_id}
+
+    for i, r in enumerate(targets):
+        if progress_callback:
+            progress_callback(f"Downloading {i+1}/{len(targets)}: {r.get('title', 'Untitled')[:60]}")
+        out_dir = _topic_dir(r.get("output_folder") or r.get("query_key") or "")
+        path = download_paper(r, output_dir=out_dir, max_size_mb=max_size_mb,
+                              skip_content_filter=skip_content_filter)
+        if path:
+            r["file_exists"] = True
+            r["file_path"] = path
+            try:
+                r["file_size_mb"] = os.path.getsize(path) / (1024 ** 2)
+            except OSError:
+                pass
+            summary["ok"].append({"id": r.get("id"), "title": r.get("title", ""), "path": path})
+        else:
+            r["file_exists"] = False
+            summary["failed"].append({"id": r.get("id"), "title": r.get("title", "")})
+
+    _sessions.save_session(session_id, session)
+    return summary
+
+
+def refresh_session_downloads(session_id: str) -> dict:
+    """Recompute file_exists/file_path/file_size_mb for every session result from
+    disk (mirrors the GUI's per-folder file-status refresh) and save. Lets a
+    resuming agent re-sync a session with whatever is already on disk."""
+    from researchforge_api import _sessions
+    session = _sessions.load_session(session_id)
+    if not session:
+        return {"error": f"Session '{session_id}' not found"}
+    session = _sessions.ensure_full_schema(session)
+
+    found = 0
+    # batch registry/listing access by topic folder, like the GUI
+    by_folder: dict = {}
+    for r in session.get("results", []):
+        by_folder.setdefault(r.get("output_folder") or r.get("query_key") or "", []).append(r)
+
+    for folder, rows in by_folder.items():
+        target_dir = _topic_dir(folder)
+        if not os.path.isdir(target_dir):
+            for r in rows:
+                r["file_exists"] = False
+            continue
+        registry = Registry(os.path.join(target_dir, "downloads_registry.db"))
+        for r in rows:
+            paper_id = r.get("id", r.get("url", ""))
+            fpath = registry.get_filepath(paper_id) if registry.is_downloaded(paper_id) else None
+            if fpath and os.path.exists(fpath):
+                r["file_exists"] = True
+                r["file_path"] = fpath
+                try:
+                    r["file_size_mb"] = os.path.getsize(fpath) / (1024 ** 2)
+                except OSError:
+                    pass
+                found += 1
+            else:
+                r["file_exists"] = False
+
+    _sessions.save_session(session_id, session)
+    return {"session_id": session_id, "downloaded": found,
+            "total": len(session.get("results", []))}
+
+
 def is_downloaded(paper_id: str, output_dir: str = "") -> bool:
     if not output_dir:
         output_dir = _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))

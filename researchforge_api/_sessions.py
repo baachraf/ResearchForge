@@ -85,6 +85,7 @@ def normalize_result(r: dict, query_key: str = "") -> dict:
     r.setdefault("relevance_threshold", 1)
     r.setdefault("filter_passed", True)
     r.setdefault("file_exists", False)
+    r.setdefault("file_path", "")
     r.setdefault("title_filter_ok", True)
     r.setdefault("relevance_score", r.get("relevance_score", 0))
     r.setdefault("score_reason", "")
