@@ -6,6 +6,8 @@
 
 Desktop application that searches academic paper databases, downloads PDFs, and uses a local/remote LLM to analyze, summarize, and synthesize research findings.
 
+**New — MCP integration:** Drive the full pipeline from your AI coding assistant (opencode, Claude Code) without opening the GUI. Search, download, analyze, synthesize, and audit papers via natural language. See [MCP Integration](#-mcp-integration) below.
+
 ---
 
 ## Features
@@ -160,12 +162,167 @@ Upload your paper (PDF or `.tex`) and run a structured pre-submission self-audit
 
 ---
 
+## 🤖 MCP Integration
+
+On top of the desktop GUI, ResearchForge exposes a **headless API layer** (`researchforge_api/`) and an **MCP server** (`mcp_server_researchforge.py`) that let you drive the entire pipeline from your preferred AI coding assistant — **opencode**, **Claude Code**, or any MCP-compatible client.
+
+This means you can integrate literature search, paper analysis, synthesis, and auditing directly into your research workflow without leaving your terminal:
+
+```
+You: "Search arXiv and PubMed for papers on rPPG waveform morphology, 
+      download the top 5, then analyze each one."
+
+Agent: [calls rf_search → rf_download_papers → rf_analyze_paper × 5]
+```
+
+### What you can do via MCP
+
+| Capability | Example prompt |
+|---|---|
+| **Search** 9 paper databases | "Search for papers on remote photoplethysmography on arXiv, PubMed, and OpenAlex" |
+| **Download** PDFs | "Download the top 5 papers from those results" |
+| **Score relevance** | "Score these papers against my research context" |
+| **Analyze** a single PDF | "Analyze the PDF at D:/papers/rPPG_survey.pdf" |
+| **Synthesize** topics | "Run topic synthesis on the downloaded papers folder" |
+| **Global synthesis** | "Generate a global cross-topic summary" |
+| **Related work** | "Generate a related work section from my summaries" |
+| **Audit** your paper | "Audit my paper at D:/mypaper.pdf — section by section" |
+| **Full pipeline** | "Run the complete pipeline on D:/downloads/topics/" |
+| **Configure** everything | "Set my DeepSeek API key to sk-... and switch the model to deepseek-chat" |
+| **Manage sessions** | "List my saved sessions and load the Morphology_Notch one" |
+| **Edit prompts** | "Show me the per-paper analysis prompt and update it" |
+
+**47 MCP tools** cover every button, dropdown, and checkbox from the GUI.
+
+### How it works
+
+The API layer sits **on top** of the existing application code — it delegates to the same `ConfigManager`, `SessionManager`, `section_detector`, `research_downloader`, and `llm_pdf_engine` modules that the GUI uses. Settings, prompts, sessions, downloads, and summaries are **shared** between the GUI and MCP — configure once in either interface, use from both.
+
+```
+┌──────────────────────────────────────────────┐
+│           ~/.ResearchForge/                   │
+│   settings.json · prompts/ · sessions/       │
+└──────────┬───────────────────┬───────────────┘
+           │                   │
+     ┌─────┴─────┐      ┌──────┴──────┐
+     │  PySide6  │      │  MCP Server │
+     │   GUI     │      │ (FastMCP)   │
+     │ main.py   │      │ 47 tools    │
+     └───────────┘      └──────┬──────┘
+                               │
+                    ┌──────────┴──────────┐
+                    │  opencode / Claude  │
+                    │  Code / any MCP     │
+                    │  client             │
+                    └─────────────────────┘
+```
+
+### Install for opencode
+
+1. **Install the MCP SDK** in the project venv:
+
+```bash
+pip install "mcp[cli]"
+```
+
+2. **Add the server** to your global opencode config (`~/.config/opencode/opencode.json`):
+
+```json
+{
+  "mcp": {
+    "researchforge": {
+      "type": "local",
+      "command": [
+        "/path/to/ResearchForge/venv/Scripts/python.exe",
+        "/path/to/ResearchForge/mcp_server_researchforge.py"
+      ],
+      "enabled": true
+    }
+  }
+}
+```
+
+> Use forward slashes in paths. On Linux/macOS, the venv python is at `venv/bin/python`.
+
+3. **Restart opencode**. The 47 `rf_*` tools are now available.
+
+### Install for Claude Code
+
+```bash
+claude mcp add researchforge -- /path/to/ResearchForge/venv/Scripts/python.exe /path/to/ResearchForge/mcp_server_researchforge.py
+```
+
+Or add manually to `~/.config/claude-code/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "researchforge": {
+      "command": "/path/to/ResearchForge/venv/Scripts/python.exe",
+      "args": ["/path/to/ResearchForge/mcp_server_researchforge.py"]
+    }
+  }
+}
+```
+
+Restart Claude Code after saving.
+
+### First-time setup via MCP
+
+If you've never opened the GUI, configure everything from your AI assistant:
+
+```
+"Set my LLM provider to DeepSeek, endpoint to https://api.deepseek.com/v1, 
+ model to deepseek-chat, and API key to sk-..."
+
+"Set my download directory to D:/Papers/downloads 
+ and summary output to D:/Papers/summaries"
+
+"Set default search sources to arxiv, pubmed, and openalex"
+
+"Test the connection"
+```
+
+All settings persist to `~/.ResearchForge/settings.json` and are shared with the GUI — open the desktop app later and everything is already configured.
+
+### Using both GUI and MCP together
+
+The GUI and MCP server are fully interoperable:
+
+- **Start in the GUI** — configure your LLM provider, API keys, and directories visually. Close the app.
+- **Continue from your terminal** — the MCP server reads the same settings. Search, download, and analyze from opencode/Claude Code.
+- **Switch back to the GUI** — sessions created via MCP appear in the session list. Downloads and summaries are visible in the respective tabs.
+
+### Available MCP tools (47)
+
+<details>
+<summary>Click to expand full tool list</summary>
+
+| Category | Tools |
+|---|---|
+| **Config** | `rf_get_config`, `rf_get_all_config`, `rf_set_config`, `rf_set_api_key`, `rf_set_llm`, `rf_set_analysis_lens`, `rf_set_search_mode` |
+| **LLM** | `rf_test_connection`, `rf_fetch_models`, `rf_discover_endpoints` |
+| **Prompts** | `rf_list_prompts`, `rf_get_prompt`, `rf_set_prompt`, `rf_reset_prompt`, `rf_reset_all_prompts` |
+| **Sessions** | `rf_list_sessions`, `rf_load_session`, `rf_save_session`, `rf_delete_session`, `rf_get_session_queries`, `rf_add_query_to_session`, `rf_remove_query_from_session` |
+| **Search** | `rf_search`, `rf_lookup_by_title`, `rf_filter_papers` |
+| **Download** | `rf_download_paper`, `rf_download_papers`, `rf_is_downloaded`, `rf_list_downloads`, `rf_list_download_tree` |
+| **Score** | `rf_score_papers` |
+| **Analyze** | `rf_analyze_paper`, `rf_analyze_own_paper`, `rf_synthesize_topic`, `rf_synthesize_global`, `rf_generate_related_work`, `rf_generate_introduction`, `rf_generate_queries`, `rf_enhance_research`, `rf_run_full_pipeline`, `rf_create_session` |
+| **Summaries** | `rf_list_summaries`, `rf_get_cached_analysis` |
+| **Audit** | `rf_audit_paper`, `rf_detect_sections`, `rf_get_section_text`, `rf_save_audit_results` |
+
+</details>
+
+---
+
 ## Project Files
 
 | File / Directory | Purpose |
 |------------------|---------|
 | `main.py` | Entry point: launches QApplication + MainWindow |
 | `llm_pdf_engine.py` | Standalone CLI engine (no GUI dependency), hardcoded fallback prompts |
+| `mcp_server_researchforge.py` | MCP server (FastMCP, stdio) — exposes 47 tools for opencode/Claude Code |
+| `researchforge_api/` | Headless API layer — wraps existing modules for MCP and scripting use |
 
 ### `gui/`: PySide6 UI
 
@@ -252,6 +409,7 @@ Control which papers are included in the related work section:
 | Package | Purpose |
 |---------|---------|
 | PySide6 | Qt GUI framework |
+| mcp | MCP server SDK (for headless/API use) |
 | openai | LLM API client |
 | pypdf | PDF text extraction |
 | pymupdf | Advanced PDF parsing |

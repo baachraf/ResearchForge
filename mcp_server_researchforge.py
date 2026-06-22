@@ -1,0 +1,387 @@
+"""
+ResearchForge MCP Server — exposes all 53 API functions as MCP tools.
+
+Usage (stdio transport, for opencode/claude):
+    python mcp_server_researchforge.py
+
+Register in opencode.json:
+    "mcp": {
+        "researchforge": {
+            "type": "local",
+            "command": ["<venv>/Scripts/python.exe", "<project>/mcp_server_researchforge.py"],
+            "enabled": true
+        }
+    }
+"""
+import os
+import sys
+import json
+import traceback
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from mcp.server.fastmcp import FastMCP
+import researchforge_api as rf
+
+mcp = FastMCP("ResearchForge")
+
+
+def _safe(result):
+    """Ensure result is JSON-serializable for MCP transport."""
+    if result is None:
+        return None
+    if isinstance(result, (str, int, float, bool)):
+        return result
+    if isinstance(result, (list, dict)):
+        return result
+    return str(result)
+
+
+# ═══════════════════════════════════════════════════════════════
+# CONFIG
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_get_config(key: str, default: str = "") -> str:
+    """Get a single config value from ResearchForge settings."""
+    return _safe(rf.get(key, default))
+
+
+@mcp.tool()
+def rf_get_all_config() -> dict:
+    """Get ALL ResearchForge settings as a dict."""
+    return _safe(rf.get_all())
+
+
+@mcp.tool()
+def rf_set_config(key: str, value: str) -> str:
+    """Set a single config value. Value is stored as string."""
+    rf.set_config(key, value)
+    return f"Set {key} = {value}"
+
+
+@mcp.tool()
+def rf_set_api_key(provider: str, api_key: str) -> str:
+    """Set an API key for a provider. Valid providers: deepseek, gemini, brave, semantic_scholar, core, pubmed."""
+    rf.set_api_key(provider, api_key)
+    return f"API key set for {provider}"
+
+
+@mcp.tool()
+def rf_set_llm(provider: str = "", endpoint: str = "", model: str = "") -> str:
+    """Configure the LLM provider, endpoint, and/or model. Pass empty string to skip a field."""
+    rf.set_llm(provider=provider or None, endpoint=endpoint or None, model=model or None)
+    return f"LLM configured: provider={rf.get('llm_provider')}, model={rf.get('llm_model')}"
+
+
+@mcp.tool()
+def rf_test_connection() -> str:
+    """Test the LLM connection. Returns status message."""
+    ok, msg = rf.test_connection()
+    return f"{'OK' if ok else 'FAIL'}: {msg}"
+
+
+@mcp.tool()
+def rf_fetch_models() -> list:
+    """Fetch available models from the current LLM provider."""
+    return _safe(rf.fetch_models())
+
+
+@mcp.tool()
+def rf_discover_endpoints() -> list:
+    """Scan localhost for running LM Studio and Ollama endpoints."""
+    return _safe(rf.discover_endpoints())
+
+
+@mcp.tool()
+def rf_set_analysis_lens(similarity: bool = True, novelty: bool = True,
+                         methodology: bool = False, gaps: bool = False) -> str:
+    """Toggle analysis lenses for synthesis output."""
+    rf.set_analysis_lens(similarity=similarity, novelty=novelty,
+                         methodology=methodology, gaps=gaps)
+    return _safe(rf.get_analysis_lenses())
+
+
+@mcp.tool()
+def rf_set_search_mode(mode: str = "academic") -> str:
+    """Set search mode: 'academic' or 'general'."""
+    rf.set_search_mode(mode)
+    return f"Search mode: {rf.get_search_mode()}"
+
+
+# ═══════════════════════════════════════════════════════════════
+# PROMPTS
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_list_prompts() -> list:
+    """List all 15 editable prompt templates."""
+    return _safe(rf.list_prompts())
+
+
+@mcp.tool()
+def rf_get_prompt(key: str) -> str:
+    """Get the full text of a prompt template. Keys: per_paper_prompt, topic_synthesis_prompt, global_synthesis_prompt, query_generation_prompt, rate_relevance_prompt, enhance_research_prompt, enhance_intent_prompt, related_work_prompt, introduction_prompt, analyze_own_paper_prompt, paper_review_prompt, paper_audit_prompt, section_preaudit_prompt, paper_review_synthesis_prompt, paper_audit_synthesis_prompt."""
+    return rf.get_prompt(key)
+
+
+@mcp.tool()
+def rf_set_prompt(key: str, text: str) -> str:
+    """Update a prompt template with new text."""
+    rf.set_prompt(key, text)
+    return f"Prompt '{key}' saved ({len(text)} chars)"
+
+
+@mcp.tool()
+def rf_reset_prompt(key: str) -> str:
+    """Reset a single prompt to the bundled default."""
+    return rf.reset_prompt(key)
+
+
+@mcp.tool()
+def rf_reset_all_prompts() -> str:
+    """Reset ALL prompts to bundled defaults."""
+    keys = rf.reset_all_prompts()
+    return f"Reset {len(keys)} prompts: {', '.join(keys)}"
+
+
+# ═══════════════════════════════════════════════════════════════
+# SESSIONS
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_list_sessions() -> list:
+    """List all saved research sessions."""
+    return _safe(rf.list_sessions())
+
+
+@mcp.tool()
+def rf_load_session(session_id: str) -> dict:
+    """Load a full session by ID (filename without .json)."""
+    return _safe(rf.load_session(session_id))
+
+
+@mcp.tool()
+def rf_save_session(session_id: str, data_json: str) -> str:
+    """Save session data. Pass data as a JSON string."""
+    data = json.loads(data_json)
+    path = rf.save_session(session_id, data)
+    return f"Saved: {path}"
+
+
+@mcp.tool()
+def rf_delete_session(session_id: str) -> str:
+    """Delete a session by ID."""
+    rf.delete_session(session_id)
+    return f"Deleted: {session_id}"
+
+
+@mcp.tool()
+def rf_get_session_queries(session_id: str) -> list:
+    """Get the queries list from a session."""
+    return _safe(rf.get_session_queries(session_id))
+
+
+@mcp.tool()
+def rf_add_query_to_session(session_id: str, query: str, max_results: int = 20,
+                            topic: str = "General") -> dict:
+    """Add a search query to an existing session."""
+    return _safe(rf.add_query_to_session(session_id, query, max_results=max_results, topic=topic))
+
+
+@mcp.tool()
+def rf_remove_query_from_session(session_id: str, query_index: int) -> dict:
+    """Remove a query from a session by index."""
+    return _safe(rf.remove_query_from_session(session_id, query_index))
+
+
+# ═══════════════════════════════════════════════════════════════
+# SEARCH
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_search(query: str, sources: list = None, max_results: int = 20,
+              after_date: str = "") -> dict:
+    """Search academic paper databases. Sources: arxiv, semantic_scholar, pubmed, brave, web, openalex, crossref, europe_pmc, core. Default: arxiv, semantic_scholar, web, brave, pubmed."""
+    return _safe(rf.search(query, sources=sources, max_results=max_results, after_date=after_date))
+
+
+@mcp.tool()
+def rf_lookup_by_title(titles: list) -> dict:
+    """Look up specific papers by title. Returns found papers and not_found list."""
+    return _safe(rf.lookup_by_title(titles))
+
+
+@mcp.tool()
+def rf_filter_papers(papers: list, title_filter: str = "",
+                     score_threshold: int = 0, must_contain: list = None) -> list:
+    """Filter a list of paper results by title keyword or relevance score."""
+    return _safe(rf.filter_papers(papers, title_filter=title_filter,
+                                   score_threshold=score_threshold,
+                                   must_contain=must_contain))
+
+
+# ═══════════════════════════════════════════════════════════════
+# DOWNLOAD
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_download_paper(paper_json: str, output_dir: str = "") -> str:
+    """Download a single paper PDF. Pass the paper dict as JSON (must have 'url', 'title', 'id')."""
+    paper = json.loads(paper_json)
+    path = rf.download_paper(paper, output_dir=output_dir)
+    return path or "Download failed"
+
+
+@mcp.tool()
+def rf_download_papers(papers_json: str, output_dir: str = "") -> dict:
+    """Download multiple paper PDFs. Pass papers as a JSON array."""
+    papers = json.loads(papers_json)
+    return _safe(rf.download_papers(papers, output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_list_downloads(output_dir: str = "") -> list:
+    """List all downloaded PDFs."""
+    return _safe(rf.list_downloads(output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_list_download_tree(output_dir: str = "") -> dict:
+    """List download directory as topic → papers tree."""
+    return _safe(rf.list_download_tree(output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_is_downloaded(paper_id: str, output_dir: str = "") -> bool:
+    """Check if a paper has already been downloaded."""
+    return rf.is_downloaded(paper_id, output_dir=output_dir)
+
+
+# ═══════════════════════════════════════════════════════════════
+# SCORE
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_score_papers(papers_json: str, research_context: str = "",
+                    intent: str = "", focus_keywords: str = "",
+                    avoid_topics: str = "", scoring_depth: int = 1) -> list:
+    """Score paper relevance 0-100 via LLM. Pass papers as JSON array. scoring_depth: 1=fast, 2=compare, 3=analyze."""
+    papers = json.loads(papers_json)
+    return _safe(rf.score_papers(papers, research_context=research_context,
+                                  intent=intent, focus_keywords=focus_keywords,
+                                  avoid_topics=avoid_topics, scoring_depth=scoring_depth))
+
+
+# ═══════════════════════════════════════════════════════════════
+# ANALYZE & SYNTHESIZE
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_analyze_paper(pdf_path: str, prompt_key: str = "per_paper_prompt") -> dict:
+    """Analyze a single PDF — extract method, contributions, results, limitations."""
+    return _safe(rf.analyze_paper(pdf_path, prompt_key=prompt_key))
+
+
+@mcp.tool()
+def rf_analyze_own_paper(pdf_path: str) -> dict:
+    """Analyze your own paper to extract claims, results, comparisons for session creation."""
+    return _safe(rf.analyze_own_paper(pdf_path))
+
+
+@mcp.tool()
+def rf_synthesize_topic(input_dir: str, output_dir: str = "") -> dict:
+    """Synthesize all PDFs in a folder into a topic-level summary (per-paper → topic synthesis)."""
+    return _safe(rf.synthesize_topic(input_dir, output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_synthesize_global(output_dir: str = "") -> dict:
+    """Global cross-topic synthesis across all topic summaries in the output dir."""
+    return _safe(rf.synthesize_global(output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_generate_related_work(output_dir: str = "") -> dict:
+    """Generate a Related Work section from existing summaries."""
+    return _safe(rf.generate_related_work(output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_generate_introduction(output_dir: str = "") -> dict:
+    """Generate an Introduction section from existing summaries."""
+    return _safe(rf.generate_introduction(output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_generate_queries(research_description: str) -> dict:
+    """Generate structured search queries from a natural-language research description."""
+    return _safe(rf.generate_queries(research_description))
+
+
+@mcp.tool()
+def rf_enhance_research(research_description: str) -> dict:
+    """Enhance a research description — split into CONTRIBUTION and PROBLEM SPACE."""
+    return _safe(rf.enhance_research(research_description))
+
+
+@mcp.tool()
+def rf_run_full_pipeline(input_dir: str, output_dir: str = "") -> dict:
+    """Run the complete 3-pass pipeline: per-paper analysis → topic synthesis → global synthesis."""
+    return _safe(rf.run_full_pipeline(input_dir, output_dir=output_dir))
+
+
+@mcp.tool()
+def rf_create_session(name: str, research_description: str,
+                      focus_keywords: str = "", topic: str = "General") -> dict:
+    """Full session creation: enhance research → generate queries → save session."""
+    return _safe(rf.create_session_full(name, research_description,
+                                         focus_keywords=focus_keywords, topic=topic))
+
+
+# ═══════════════════════════════════════════════════════════════
+# SUMMARIES
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_list_summaries(summary_dir: str = "") -> list:
+    """List all generated summaries (global, topic, per-paper, related_work, introduction)."""
+    return _safe(rf.list_summaries(summary_dir=summary_dir))
+
+
+@mcp.tool()
+def rf_get_cached_analysis(cache_path: str) -> str:
+    """Read the content of a cached analysis file by path."""
+    return rf.get_cached_analysis(cache_path)
+
+
+# ═══════════════════════════════════════════════════════════════
+# AUDIT
+# ═══════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def rf_audit_paper(pdf_path: str, mode: str = "section") -> dict:
+    """Run a 10-dimension IEEE pre-submission audit on a paper. mode: 'section' (section-by-section) or 'full' (single call, needs large context model)."""
+    return _safe(rf.audit_paper(pdf_path, mode=mode))
+
+
+@mcp.tool()
+def rf_detect_sections(pdf_path: str) -> dict:
+    """Detect and return paper sections from a PDF."""
+    return _safe(rf.detect_sections(pdf_path))
+
+
+@mcp.tool()
+def rf_get_section_text(pdf_path: str, section_name: str) -> str:
+    """Get the text of a specific section (e.g. 'Introduction', 'Methods')."""
+    return rf.get_section_text(pdf_path, section_name)
+
+
+@mcp.tool()
+def rf_save_audit_results(report: str, pdf_path: str = "") -> str:
+    """Save an audit report to a markdown file. Returns the filepath."""
+    return rf.save_audit_results(report, pdf_path=pdf_path)
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
