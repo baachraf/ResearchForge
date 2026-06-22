@@ -190,9 +190,12 @@ def rf_get_session_queries(session_id: str) -> list:
 
 @mcp.tool()
 def rf_add_query_to_session(session_id: str, query: str, max_results: int = 20,
+                            name: str = "", sources: list = None,
                             topic: str = "General") -> dict:
-    """Add a search query to an existing session."""
-    return _safe(rf.add_query_to_session(session_id, query, max_results=max_results, topic=topic))
+    """Add a search query to an existing session. `name` is the label shown for the
+    query in the GUI (auto-derived from the query text if omitted)."""
+    return _safe(rf.add_query_to_session(session_id, query, max_results=max_results,
+                                         name=name, sources=sources, topic=topic))
 
 
 @mcp.tool()
@@ -201,15 +204,37 @@ def rf_remove_query_from_session(session_id: str, query_index: int) -> dict:
     return _safe(rf.remove_query_from_session(session_id, query_index))
 
 
+@mcp.tool()
+def rf_set_session_results(session_id: str, results_json: str,
+                           query_key: str = "", append: bool = False) -> dict:
+    """Register search results into a session so they show in the GUI results table.
+    Pass results as a JSON array. `query_key` links results to a query by its name
+    (defaults to the session's first query). `append=True` merges with existing
+    results (dedup by id) instead of replacing."""
+    results = json.loads(results_json) if isinstance(results_json, str) else results_json
+    return _safe(rf.set_session_results(session_id, results, query_key=query_key, append=append))
+
+
 # ═══════════════════════════════════════════════════════════════
 # SEARCH
 # ═══════════════════════════════════════════════════════════════
 
 @mcp.tool()
 def rf_search(query: str, sources: list = None, max_results: int = 20,
-              after_date: str = "") -> dict:
-    """Search academic paper databases. Sources: arxiv, semantic_scholar, pubmed, brave, web, openalex, crossref, europe_pmc, core. Default: arxiv, semantic_scholar, web, brave, pubmed."""
-    return _safe(rf.search(query, sources=sources, max_results=max_results, after_date=after_date))
+              after_date: str = "", session_id: str = "", query_name: str = "") -> dict:
+    """Search academic paper databases. Sources: arxiv, semantic_scholar, pubmed, brave, web, openalex, crossref, europe_pmc, core. Default: arxiv, semantic_scholar, web, brave, pubmed.
+
+    If `session_id` is given, the hits are also registered into that session
+    (GUI-loadable) and linked to `query_name` (or the session's first query)."""
+    out = _safe(rf.search(query, sources=sources, max_results=max_results, after_date=after_date))
+    if session_id and isinstance(out, dict) and out.get("results"):
+        try:
+            rf.set_session_results(session_id, out["results"],
+                                   query_key=query_name, append=True)
+            out["registered_to_session"] = session_id
+        except Exception as e:
+            out["session_save_error"] = str(e)
+    return out
 
 
 @mcp.tool()

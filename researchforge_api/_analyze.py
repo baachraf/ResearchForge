@@ -559,30 +559,40 @@ def create_session_full(
     topic: str = "General",
 ) -> dict:
     """Full session creation flow: enhance → generate queries → save session.
-    Returns the created session dict."""
+
+    Builds the canonical GUI schema (via _sessions.blank_session) so the session
+    loads identically in the desktop app. LLM steps (enhance/generate) are
+    best-effort: if the LLM is unavailable the session is still created with the
+    correct schema and an empty query list.
+    Returns the created session dict.
+    """
     from researchforge_api import _sessions
 
-    enhanced = {}
-    queries = {}
+    context = research_description
+    intent = ""
     try:
         enhanced = enhance_research(research_description)
-    except Exception as e:
-        enhanced = {"error": str(e)}
+        if isinstance(enhanced, dict) and "error" not in enhanced:
+            context = enhanced.get("context") or research_description
+            intent = enhanced.get("intent", "") or ""
+    except Exception:
+        pass
 
+    queries = []
     try:
-        queries = generate_queries(research_description)
-    except Exception as e:
-        queries = {"error": str(e)}
+        gen = generate_queries(research_description)
+        if isinstance(gen, dict):
+            queries = gen.get("queries", []) or []
+    except Exception:
+        pass
 
-    session_data = {
-        "name": name,
-        "topic": topic,
-        "description": research_description,
-        "focus_keywords": focus_keywords,
-        "enhanced": enhanced,
-        "queries": queries.get("queries", []),
-        "results": [],
-    }
+    session_data = _sessions.blank_session(
+        name=name,
+        context=context,
+        intent=intent,
+        focus_keywords=focus_keywords,
+    )
+    session_data["queries"] = [_sessions.normalize_query(q) for q in queries]
 
     path = _sessions.save_session(name, session_data)
     session_data["_path"] = path
