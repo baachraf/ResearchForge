@@ -192,7 +192,7 @@ Agent: [calls rf_search → rf_download_papers → rf_analyze_paper × 5]
 | **Manage sessions** | "List my saved sessions and load the Morphology_Notch one" |
 | **Edit prompts** | "Show me the per-paper analysis prompt and update it" |
 
-**47 MCP tools** cover every button, dropdown, and checkbox from the GUI.
+**52 MCP tools** cover every button, dropdown, and checkbox from the GUI — including **resumable sessions**: create and search one day, then reload the same session later to download, score, and synthesize, with all state (queries, results, scores, downloads) saved in the session exactly as the GUI persists it.
 
 ### How it works
 
@@ -207,7 +207,7 @@ The API layer sits **on top** of the existing application code — it delegates 
      ┌─────┴─────┐      ┌──────┴──────┐
      │  PySide6  │      │  MCP Server │
      │   GUI     │      │ (FastMCP)   │
-     │ main.py   │      │ 47 tools    │
+     │ main.py   │      │ 52 tools    │
      └───────────┘      └──────┬──────┘
                                │
                     ┌──────────┴──────────┐
@@ -239,6 +239,13 @@ The built `ResearchForge.exe` is self-contained: double-click it for the GUI, or
    ```
 
    Other clients: use their equivalent stdio-server config, with the same command and `--mcp` argument.
+
+> **Windows Defender note.** The exe is a Nuitka one-file build; a freshly-downloaded copy can trip a false positive (`Error 225 — file contains a virus`) when it unpacks its DLLs at runtime. If it won't start, allow it from an **elevated** PowerShell:
+> ```powershell
+> Add-MpPreference -ExclusionProcess "C:\path\to\ResearchForge.exe"
+> Add-MpPreference -ExclusionPath    "C:\path\to\ResearchForge"
+> ```
+> Or skip the exe entirely and run the server from source (next section) — no binary, no false positive.
 
 > **Let the agent do it.** You can simply give your AI assistant this repository link and ask it to *"install the ResearchForge MCP server."* The instructions above are all it needs to download the exe and register it into whatever client it's running in.
 
@@ -273,11 +280,11 @@ pip install "mcp[cli]"
 
 > Use forward slashes in paths. On Linux/macOS, the venv python is at `venv/bin/python`.
 
-3. **Restart opencode**. The 47 `rf_*` tools are now available.
+3. **Restart opencode**. The 52 `rf_*` tools are now available.
 
 ### Install for Claude Code (global)
 
-Register the server once at **user scope** (`-s user`) so the 47 `rf_*` tools are available in **every** Claude Code project, not just the current directory:
+Register the server once at **user scope** (`-s user`) so the 52 `rf_*` tools are available in **every** Claude Code project, not just the current directory:
 
 ```bash
 claude mcp add researchforge -s user -- /path/to/ResearchForge/venv/Scripts/python.exe /path/to/ResearchForge/mcp_server_researchforge.py
@@ -328,7 +335,7 @@ The GUI and MCP server are fully interoperable:
 - **Continue from your terminal** — the MCP server reads the same settings. Search, download, and analyze from opencode/Claude Code.
 - **Switch back to the GUI** — sessions created via MCP appear in the session list. Downloads and summaries are visible in the respective tabs.
 
-### Available MCP tools (47)
+### Available MCP tools (52)
 
 <details>
 <summary>Click to expand full tool list</summary>
@@ -338,13 +345,15 @@ The GUI and MCP server are fully interoperable:
 | **Config** | `rf_get_config`, `rf_get_all_config`, `rf_set_config`, `rf_set_api_key`, `rf_set_llm`, `rf_set_analysis_lens`, `rf_set_search_mode` |
 | **LLM** | `rf_test_connection`, `rf_fetch_models`, `rf_discover_endpoints` |
 | **Prompts** | `rf_list_prompts`, `rf_get_prompt`, `rf_set_prompt`, `rf_reset_prompt`, `rf_reset_all_prompts` |
-| **Sessions** | `rf_list_sessions`, `rf_load_session`, `rf_save_session`, `rf_delete_session`, `rf_get_session_queries`, `rf_add_query_to_session`, `rf_remove_query_from_session` |
-| **Search** | `rf_search`, `rf_lookup_by_title`, `rf_filter_papers` |
-| **Download** | `rf_download_paper`, `rf_download_papers`, `rf_is_downloaded`, `rf_list_downloads`, `rf_list_download_tree` |
-| **Score** | `rf_score_papers` |
+| **Sessions** | `rf_list_sessions`, `rf_load_session`, `rf_save_session`, `rf_delete_session`, `rf_get_session_queries`, `rf_add_query_to_session`, `rf_remove_query_from_session`, `rf_set_session_results`, `rf_update_session` |
+| **Search** | `rf_search` (optional `session_id` registers hits into a session), `rf_lookup_by_title`, `rf_filter_papers` |
+| **Download** | `rf_download_paper`, `rf_download_papers`, `rf_download_session`, `rf_refresh_session_downloads`, `rf_is_downloaded`, `rf_list_downloads`, `rf_list_download_tree` |
+| **Score** | `rf_score_papers`, `rf_score_session` |
 | **Analyze** | `rf_analyze_paper`, `rf_analyze_own_paper`, `rf_synthesize_topic`, `rf_synthesize_global`, `rf_generate_related_work`, `rf_generate_introduction`, `rf_generate_queries`, `rf_enhance_research`, `rf_run_full_pipeline`, `rf_create_session` |
 | **Summaries** | `rf_list_summaries`, `rf_get_cached_analysis` |
 | **Audit** | `rf_audit_paper`, `rf_detect_sections`, `rf_get_section_text`, `rf_save_audit_results` |
+
+**Resumable-session tools** (`rf_download_session`, `rf_refresh_session_downloads`, `rf_score_session`, `rf_set_session_results`, `rf_update_session`) write their results back into the session so a later reload sees scores, downloads, and state — the same data the GUI saves. Session downloads land in `output_root/<session name>/<query>/`, matching the GUI's folder layout.
 
 </details>
 
@@ -356,7 +365,7 @@ The GUI and MCP server are fully interoperable:
 |------------------|---------|
 | `main.py` | Entry point: launches QApplication + MainWindow |
 | `llm_pdf_engine.py` | Standalone CLI engine (no GUI dependency), hardcoded fallback prompts |
-| `mcp_server_researchforge.py` | MCP server (FastMCP, stdio) — exposes 47 tools for opencode/Claude Code |
+| `mcp_server_researchforge.py` | MCP server (FastMCP, stdio) — exposes 52 tools for opencode/Claude Code |
 | `researchforge_api/` | Headless API layer — wraps existing modules for MCP and scripting use |
 
 ### `gui/`: PySide6 UI
