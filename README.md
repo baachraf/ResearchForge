@@ -219,19 +219,30 @@ The API layer sits **on top** of the existing application code — it delegates 
 
 ### Install via the standalone exe (no Python, no venv) — recommended
 
-The built `ResearchForge.exe` is self-contained: double-click it for the GUI, or run it with `--mcp` and it acts as the MCP server — no Python install, no venv, no source tree. One PowerShell line downloads the exe to a canonical per-user location (only if it isn't already there) and registers it with Claude Code:
+The built `ResearchForge.exe` is self-contained: double-click it for the GUI, or run it with `--mcp` and it acts as the MCP server — no Python install, no venv, no source tree. Setup is two steps:
 
-```powershell
-irm https://raw.githubusercontent.com/baachraf/ResearchForge/main/install_mcp.ps1 | iex
-```
+1. **Download the exe** from the [latest release](https://github.com/baachraf/ResearchForge/releases/latest). Any location works; a clean choice is `%LOCALAPPDATA%\Programs\ResearchForge\ResearchForge.exe`. (If you already use the desktop app, point at that same exe.)
+2. **Register it with your MCP client**, running the exe with `--mcp` (stdio transport):
 
-This installs `ResearchForge.exe` to `%LOCALAPPDATA%\Programs\ResearchForge\` and runs:
+   **Claude Code:**
+   ```
+   claude mcp add researchforge -s user -- "C:\path\to\ResearchForge.exe" --mcp
+   ```
 
-```
-claude mcp add researchforge -s user -- "%LOCALAPPDATA%\Programs\ResearchForge\ResearchForge.exe" --mcp
-```
+   **opencode** — add to `~/.config/opencode/opencode.json`:
+   ```json
+   "researchforge": {
+     "type": "local",
+     "command": ["C:/path/to/ResearchForge.exe", "--mcp"],
+     "enabled": true
+   }
+   ```
 
-That fixed path is the source of truth — it never depends on where you happened to save anything. If you already downloaded the GUI release into that folder, the script skips the download and just registers it. Open a new Claude Code session and the 47 `rf_*` tools are available.
+   Other clients: use their equivalent stdio-server config, with the same command and `--mcp` argument.
+
+> **Let the agent do it.** You can simply give your AI assistant this repository link and ask it to *"install the ResearchForge MCP server."* The instructions above are all it needs to download the exe and register it into whatever client it's running in.
+
+The exe and the stdio protocol are **client-independent** — the same binary serves Claude Code, opencode, or any MCP client. Only the registration above differs per client. On first use the server creates `~/.ResearchForge/` (settings, sessions, downloads, summaries); this is **shared** with the desktop GUI, so work done via MCP shows up when you later open the app, and vice-versa.
 
 > Requires an MCP-enabled release build (the exe must support the `--mcp` flag). The methods below run the server from source via a Python venv instead.
 
