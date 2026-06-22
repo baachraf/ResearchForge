@@ -2,7 +2,7 @@
 setlocal
 
 set VENV_PYTHON=%~dp0venv\Scripts\python.exe
-set BUILD_DIR=C:\ResearchForge_build
+set BUILD_DIR=D:\ResearchForge_build
 
 echo === ResearchForge — Nuitka Build (single exe) ===
 echo.
@@ -40,7 +40,7 @@ echo.
   --enable-plugin=pyside6 ^
   --output-dir=%BUILD_DIR% ^
   --output-filename=ResearchForge.exe ^
-  --windows-console-mode=disable ^
+  --windows-console-mode=attach ^
   --windows-icon-from-ico=design\app_icone.ico ^
   --include-data-dir=design=design ^
   --include-data-dir=config=config ^
@@ -51,6 +51,9 @@ echo.
   --include-module=arxiv ^
   --include-module=tqdm ^
   --include-module=requests ^
+  --include-package=mcp ^
+  --include-package=researchforge_api ^
+  --include-module=mcp_server_researchforge ^
   --nofollow-import-to=PySide6.QtWebEngine ^
   --nofollow-import-to=PySide6.QtWebEngineCore ^
   --nofollow-import-to=PySide6.QtWebEngineWidgets ^

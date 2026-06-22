@@ -217,6 +217,24 @@ The API layer sits **on top** of the existing application code — it delegates 
                     └─────────────────────┘
 ```
 
+### Install via the standalone exe (no Python, no venv) — recommended
+
+The built `ResearchForge.exe` is self-contained: double-click it for the GUI, or run it with `--mcp` and it acts as the MCP server — no Python install, no venv, no source tree. One PowerShell line downloads the exe to a canonical per-user location (only if it isn't already there) and registers it with Claude Code:
+
+```powershell
+irm https://raw.githubusercontent.com/baachraf/ResearchForge/main/install_mcp.ps1 | iex
+```
+
+This installs `ResearchForge.exe` to `%LOCALAPPDATA%\Programs\ResearchForge\` and runs:
+
+```
+claude mcp add researchforge -s user -- "%LOCALAPPDATA%\Programs\ResearchForge\ResearchForge.exe" --mcp
+```
+
+That fixed path is the source of truth — it never depends on where you happened to save anything. If you already downloaded the GUI release into that folder, the script skips the download and just registers it. Open a new Claude Code session and the 47 `rf_*` tools are available.
+
+> Requires an MCP-enabled release build (the exe must support the `--mcp` flag). The methods below run the server from source via a Python venv instead.
+
 ### Install for opencode
 
 1. **Install the MCP SDK** in the project venv:
