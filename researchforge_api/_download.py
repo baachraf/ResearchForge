@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Optional
 from researchforge_api import _config
 
@@ -77,10 +78,24 @@ def _output_root() -> str:
     return _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
 
 
-def _topic_dir(output_folder: str) -> str:
-    """Per-query topic folder, matching the GUI's output_root/<output_folder>/ layout."""
-    root = _output_root()
-    return os.path.join(root, output_folder) if output_folder else root
+def _sanitize_session_name(name: str) -> str:
+    """Same sanitisation the GUI applies to derive session_download_name
+    (gui/search_tab.py)."""
+    return re.sub(r'[\\/*?:"<>|]', '_', name or "")
+
+
+def _topic_dir(session_name: str, output_folder: str) -> str:
+    """Per-paper download folder, matching the GUI's layout exactly:
+    output_root / <sanitised session name> / <output_folder (query name)> / .
+    The GUI's _session_root() inserts the session-name segment, and DownloadWorker
+    appends the query's output_folder; this must match so the GUI finds the files."""
+    parts = [_output_root()]
+    sn = _sanitize_session_name(session_name)
+    if sn:
+        parts.append(sn)
+    if output_folder:
+        parts.append(output_folder)
+    return os.path.join(*parts)
 
 
 def download_session(session_id: str,
@@ -101,6 +116,7 @@ def download_session(session_id: str,
         return {"error": f"Session '{session_id}' not found"}
     session = _sessions.ensure_full_schema(session)
 
+    session_name = session.get("name", session_id)
     results = session.get("results", [])
     targets = [r for r in results
                if paper_ids is None or r.get("id") in paper_ids]
@@ -109,7 +125,7 @@ def download_session(session_id: str,
     for i, r in enumerate(targets):
         if progress_callback:
             progress_callback(f"Downloading {i+1}/{len(targets)}: {r.get('title', 'Untitled')[:60]}")
-        out_dir = _topic_dir(r.get("output_folder") or r.get("query_key") or "")
+        out_dir = _topic_dir(session_name, r.get("output_folder") or r.get("query_key") or "")
         path = download_paper(r, output_dir=out_dir, max_size_mb=max_size_mb,
                               skip_content_filter=skip_content_filter)
         if path:
@@ -138,6 +154,7 @@ def refresh_session_downloads(session_id: str) -> dict:
         return {"error": f"Session '{session_id}' not found"}
     session = _sessions.ensure_full_schema(session)
 
+    session_name = session.get("name", session_id)
     found = 0
     # batch registry/listing access by topic folder, like the GUI
     by_folder: dict = {}
@@ -145,7 +162,7 @@ def refresh_session_downloads(session_id: str) -> dict:
         by_folder.setdefault(r.get("output_folder") or r.get("query_key") or "", []).append(r)
 
     for folder, rows in by_folder.items():
-        target_dir = _topic_dir(folder)
+        target_dir = _topic_dir(session_name, folder)
         if not os.path.isdir(target_dir):
             for r in rows:
                 r["file_exists"] = False
