@@ -246,26 +246,32 @@ pip install "mcp[cli]"
 
 3. **Restart opencode**. The 47 `rf_*` tools are now available.
 
-### Install for Claude Code
+### Install for Claude Code (global)
+
+Register the server once at **user scope** (`-s user`) so the 47 `rf_*` tools are available in **every** Claude Code project, not just the current directory:
 
 ```bash
-claude mcp add researchforge -- /path/to/ResearchForge/venv/Scripts/python.exe /path/to/ResearchForge/mcp_server_researchforge.py
+claude mcp add researchforge -s user -- /path/to/ResearchForge/venv/Scripts/python.exe /path/to/ResearchForge/mcp_server_researchforge.py
 ```
 
-Or add manually to `~/.config/claude-code/claude_desktop_config.json`:
+> Use absolute paths. On Linux/macOS the venv python is at `venv/bin/python`. If a path contains spaces, quote each path argument.
 
-```json
-{
-  "mcpServers": {
-    "researchforge": {
-      "command": "/path/to/ResearchForge/venv/Scripts/python.exe",
-      "args": ["/path/to/ResearchForge/mcp_server_researchforge.py"]
-    }
-  }
-}
+This writes the server to your global Claude Code config at `~/.claude.json` (on Windows: `C:\Users\<you>\.claude.json`) under user scope — no manual JSON editing required. To register it for the **current project only** instead, drop the `-s user` flag (the default is local/project scope).
+
+Verify the install:
+
+```bash
+claude mcp list                 # should show: researchforge ... ✔ Connected
+claude mcp get researchforge    # Scope: User config (available in all your projects)
 ```
 
-Restart Claude Code after saving.
+To remove it later:
+
+```bash
+claude mcp remove researchforge -s user
+```
+
+No restart needed — Claude Code picks up the new server on the next session.
 
 ### First-time setup via MCP
 
