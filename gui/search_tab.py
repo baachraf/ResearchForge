@@ -3,6 +3,7 @@ Search & Download Tab with query builder, session management, and review mode.
 """
 import os
 import re
+import json
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -1033,7 +1034,18 @@ class SearchDownloadTab(QWidget):
         qd.setdefault("and_terms", qd.get("query", "").split() if qd.get("query") else [])
         qd.setdefault("or_terms", [])
         qd.setdefault("language", "en")
-        qd["sources"] = self.cfg.get("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
+        src = self.cfg.get("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
+        if isinstance(src, str):
+            # Tolerate a string-encoded value (e.g. '["arxiv","pubmed"]') so it is
+            # never iterated character-by-character in the Sources column.
+            try:
+                parsed = json.loads(src)
+                src = parsed if isinstance(parsed, list) else None
+            except (ValueError, TypeError):
+                src = None
+            if src is None:
+                src = [t.strip() for t in str(self.cfg.get("default_sources", "")).strip("[]").replace('"', "").replace("'", "").split(",") if t.strip()]
+        qd["sources"] = src
         return qd
 
     def _session_load(self):

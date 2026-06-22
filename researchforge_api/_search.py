@@ -54,7 +54,10 @@ def search_papers(
 ) -> dict:
     """Search across configured sources. Returns dict with 'results' and per-source stats."""
     if sources is None:
-        sources = _config.get("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
+        sources = _config.get_list("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
+    elif isinstance(sources, str):
+        # An agent may pass sources as a string instead of a JSON array.
+        sources = [s.strip() for s in sources.strip("[]").replace('"', "").replace("'", "").split(",") if s.strip()]
 
     search_term = _clean_query(query)
     if must_contain:

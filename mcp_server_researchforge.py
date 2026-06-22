@@ -55,9 +55,15 @@ def rf_get_all_config() -> dict:
 
 @mcp.tool()
 def rf_set_config(key: str, value: str) -> str:
-    """Set a single config value. Value is stored as string."""
+    """Set a single config value.
+
+    Scalar values are stored as-is. For list/object settings (e.g.
+    default_sources), pass a JSON array string like '["arxiv","pubmed"]' — it is
+    parsed back into a real list before storing, so it is never mishandled as a
+    character sequence."""
     rf.set_config(key, value)
-    return f"Set {key} = {value}"
+    stored = rf.get(key)
+    return f"Set {key} = {stored!r}"
 
 
 @mcp.tool()

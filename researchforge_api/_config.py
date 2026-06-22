@@ -4,6 +4,8 @@ The API sits ON TOP of the existing application. ConfigManager is the single
 source of truth for settings.json, prompt paths, and prompt staleness checks.
 This module wraps it with a simpler function-based interface for MCP use.
 """
+import json
+
 from gui.config_manager import ConfigManager, DEFAULT_SETTINGS
 
 _cfg = None
@@ -16,6 +18,23 @@ def _get_cfg() -> ConfigManager:
     return _cfg
 
 
+def _coerce_json_container(value):
+    """If value is a string holding a JSON list/object (e.g. '["arxiv","pubmed"]'),
+    parse it back into a real list/dict. Leaves scalar strings untouched.
+
+    MCP tool arguments often arrive as strings; without this, a list-typed
+    setting like default_sources gets stored as a string and later iterated
+    character-by-character (the 'a, r, x, i, v' display bug)."""
+    if isinstance(value, str):
+        s = value.strip()
+        if s[:1] in ("[", "{"):
+            try:
+                return json.loads(s)
+            except ValueError:
+                pass
+    return value
+
+
 def get_all() -> dict:
     return _get_cfg().to_dict()
 
@@ -24,8 +43,19 @@ def get(key: str, default=None):
     return _get_cfg().get(key, default)
 
 
+def get_list(key: str, default=None):
+    """Read a setting that must be a list, tolerating a string-encoded value."""
+    v = _get_cfg().get(key, default)
+    if isinstance(v, str):
+        parsed = _coerce_json_container(v)
+        if isinstance(parsed, list):
+            return parsed
+        return [t.strip() for t in v.strip("[]").replace('"', "").replace("'", "").split(",") if t.strip()]
+    return v if isinstance(v, list) else ([] if default is None else default)
+
+
 def set_(key: str, value):
-    _get_cfg().set(key, value)
+    _get_cfg().set(key, _coerce_json_container(value))
 
 
 def set_api_key(provider: str, key_value: str):
