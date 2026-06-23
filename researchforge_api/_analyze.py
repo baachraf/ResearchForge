@@ -1,12 +1,81 @@
+"""Analyze + synthesize layer — uses ``gui.paths`` for the canonical layout.
+
+Every function that writes to disk accepts an optional ``session_id``. When
+given, outputs land in the GUI's exact layout (``<summary>/<session>/<model>/``
+with ``detailed_topic_reviews/<topic>/`` subfolders) so the Check Summaries
+tab, the per-paper cache, and global/related-work/introduction generation all
+interoperate whether the work was done from the GUI or the headless API.
+
+When ``output_dir`` is passed explicitly it is treated as the model root
+directly (raw/ad-hoc mode for callers that know what they want). When neither
+``session_id`` nor ``output_dir`` is given the function returns an error
+rather than silently writing to a default location.
+"""
 import os
 import re
 import json
 from researchforge_api import _config, _llm, _prompts
+from gui import paths
 
 from llm_pdf_engine import (
     TOPIC_SYNTHESIS_PROMPT, GLOBAL_SYNTHESIS_PROMPT, PAPER_SEPARATOR,
 )
 
+
+# ─── path resolution helpers ────────────────────────────────────────────────
+
+def _session_name(session_id: str) -> str:
+    """Resolve a session_id to its canonical ``name`` field. Returns '' if
+    the session can't be loaded."""
+    if not session_id:
+        return ""
+    from researchforge_api import _sessions
+    s = _sessions.load_session(session_id)
+    return (s.get("name") if s else "") or ""
+
+
+def _resolve_model_root(session_id: str, output_dir: str) -> str:
+    """Decide the model_output_root directory for synthesis writes.
+
+    Priority: explicit ``output_dir`` (raw override) > session-derived layout
+    (``paths.model_output_root``). Raises ``ValueError`` if neither is usable
+    so callers can surface a clear error rather than write to a wrong place.
+    """
+    if output_dir:
+        return output_dir
+    sn = _session_name(session_id)
+    if not sn:
+        raise ValueError(
+            "synthesize_* needs either an explicit output_dir or a valid "
+            "session_id, so the output can land in the GUI's "
+            "summary/<session>/<model>/ layout."
+        )
+    return paths.model_output_root(_config, sn)
+
+
+def _resolve_topic_input(session_id: str, input_dir: str, topic_name: str) -> tuple[str, str]:
+    """Resolve (input_dir, topic_name) for synthesize_topic.
+
+    If ``input_dir`` is given, use it and derive topic_name from its basename.
+    Else if ``session_id`` is given, derive input_dir from the session's
+    downloads (per-topic if topic_name is set, else the session root).
+    Returns ("", "")-ish error sentinels via the tuple; caller checks input_dir.
+    """
+    if input_dir:
+        tn = topic_name or os.path.basename(os.path.normpath(input_dir))
+        return input_dir, tn
+    if not session_id:
+        return "", topic_name
+    sn = _session_name(session_id)
+    if not sn:
+        return "", topic_name
+    if topic_name:
+        return paths.topic_downloads_dir(_config, sn, topic_name), topic_name
+    # No topic_name: caller must pass input_dir or topic_name with session_id.
+    return "", topic_name
+
+
+# ─── PDF text extraction ────────────────────────────────────────────────────
 
 def _extract_paper_text(pdf_path: str, max_pages: int = 30, max_chars: int = 60000) -> str:
     try:
@@ -25,19 +94,26 @@ def _extract_paper_text(pdf_path: str, max_pages: int = 30, max_chars: int = 600
         pass
 
     import pypdf
-    text = ""
-    with open(pdf_path, "rb") as fh:
-        reader = pypdf.PdfReader(fh)
-        for i in range(min(len(reader.pages), max_pages)):
-            pt = reader.pages[i].extract_text()
-            if pt:
-                text += pt
+    try:
+        text = ""
+        with open(pdf_path, "rb") as fh:
+            reader = pypdf.PdfReader(fh)
+            for i in range(min(len(reader.pages), max_pages)):
+                pt = reader.pages[i].extract_text()
+                if pt:
+                    text += pt
+    except Exception:
+        # Corrupt/truncated PDF → no extractable text. Caller treats "" as
+        # unprocessable and writes a .skipped marker (GUI parity).
+        return ""
     if len(text) <= max_chars:
         return text
     front = int(max_chars * 0.75)
     back = max_chars - front
     return text[:front] + "\n\n[...]\n\n" + text[-back:]
 
+
+# ─── per-paper analysis (no layout writes — returns dict) ───────────────────
 
 def analyze_paper(
     pdf_path: str,
@@ -92,28 +168,64 @@ def analyze_paper(
     }
 
 
+# ─── topic / global / section synthesis (session-aware, GUI layout) ─────────
+
+def _write_skipped(cache_dir: str, pdf_file: str, reason: str) -> None:
+    """Mirror the GUI's .skipped marker so a resume sees the paper as
+    permanently unprocessable (HTML, no text, etc.)."""
+    try:
+        with open(os.path.join(cache_dir, os.path.splitext(pdf_file)[0] + ".skipped"), "w") as sf:
+            sf.write(reason)
+    except OSError:
+        pass
+
+
 def synthesize_topic(
-    input_dir: str,
+    input_dir: str = "",
     output_dir: str = "",
+    *,
+    session_id: str = "",
+    topic_name: str = "",
     prompt_key: str = "topic_synthesis_prompt",
     progress_callback=None,
 ) -> dict:
-    """Synthesize all PDFs in a folder into a topic summary. Returns dict with output paths."""
+    """Synthesize all PDFs in one topic folder into a topic-level summary.
+
+    Output lands in the GUI's canonical layout so the Check Summaries tab and
+    the per-paper cache interoperate:
+
+        <summary>/<session>/<model>/
+        ├── <topic>_SUMMARY.md
+        └── detailed_topic_reviews/<topic>/
+            ├── MASTER_REPORT.md
+            └── _cache/<pdf>.md   (+ <pdf>.skipped markers)
+
+    Path resolution:
+      * Pass ``session_id`` (recommended) — input defaults to that session's
+        downloads, output to its ``<summary>/<session>/<model>/`` folder.
+      * Pass ``input_dir`` + ``output_dir`` explicitly for raw/ad-hoc use;
+        ``output_dir`` is then the model root directly.
+      * ``topic_name`` defaults to ``basename(input_dir)``.
+    """
+    input_dir, topic_name = _resolve_topic_input(session_id, input_dir, topic_name)
+    if not input_dir:
+        return {"error": "Provide input_dir, or session_id (+ optional topic_name)."}
     if not os.path.isdir(input_dir):
         return {"error": f"Not a directory: {input_dir}"}
+    if not topic_name:
+        topic_name = os.path.basename(os.path.normpath(input_dir))
 
-    folder_name = os.path.basename(input_dir)
-    if not output_dir:
-        base = _config.get("summary_output_dir", os.path.join(_config.get_app_data_dir(), "summaries"))
-        output_dir = os.path.join(base, "synthesis")
+    try:
+        model_root = _resolve_model_root(session_id, output_dir)
+    except ValueError as e:
+        return {"error": str(e)}
 
-    os.makedirs(output_dir, exist_ok=True)
-    cache_dir = os.path.join(output_dir, "_cache")
+    cache_dir = paths.topic_cache_dir(model_root, topic_name)
     os.makedirs(cache_dir, exist_ok=True)
 
     pdf_files = [f for f in os.listdir(input_dir) if f.lower().endswith('.pdf')]
     if not pdf_files:
-        return {"error": "No PDFs found", "topic": folder_name}
+        return {"error": "No PDFs found", "topic": topic_name}
 
     prompt_template = _prompts.get_prompt("per_paper_prompt")
     client = _llm.create_client_from_config(timeout=180.0)
@@ -128,11 +240,23 @@ def synthesize_topic(
         if os.path.exists(cache_file):
             cached += 1
             continue
+        # Also count existing .skipped markers as "done" (GUI parity).
+        if os.path.exists(os.path.join(cache_dir, os.path.splitext(pdf_file)[0] + ".skipped")):
+            cached += 1
+            continue
 
         pdf_path = os.path.join(input_dir, pdf_file)
+        with open(pdf_path, 'rb') as fh:
+            header = fh.read(512)
+        if header.lstrip().startswith(b'<') or not header.lstrip().startswith(b'%PDF'):
+            errors += 1
+            _write_skipped(cache_dir, pdf_file, "HTML or invalid PDF header")
+            continue
+
         content = _extract_paper_text(pdf_path)
         if not content.strip():
             errors += 1
+            _write_skipped(cache_dir, pdf_file, "No extractable text")
             continue
 
         if progress_callback:
@@ -153,14 +277,17 @@ def synthesize_topic(
                 processed += 1
             else:
                 errors += 1
+                _write_skipped(cache_dir, pdf_file, "LLM returned empty response")
         except Exception:
             errors += 1
+            _write_skipped(cache_dir, pdf_file, "LLM error")
 
     try:
         client._client.close()
     except Exception:
         pass
 
+    # Build per-topic master report from cache (GUI parity).
     master_content = ""
     for pdf in sorted(pdf_files):
         cf = os.path.join(cache_dir, os.path.splitext(pdf)[0] + ".md")
@@ -168,15 +295,15 @@ def synthesize_topic(
             with open(cf, "r", encoding="utf-8") as f:
                 master_content += f"\n### PAPER: {pdf}\n\n{f.read().strip()}\n\n{'-'*60}\n"
 
-    master_path = os.path.join(output_dir, "MASTER_REPORT.md")
+    master_path = paths.topic_master_report(model_root, topic_name)
     with open(master_path, "w", encoding="utf-8") as f:
-        f.write(f"# MASTER REPORT: {folder_name}\nModel: {model}\nPapers: {len(pdf_files)}\n\n{master_content}")
+        f.write(f"# MASTER REPORT: {topic_name}\nModel: {model}\nPapers: {len(pdf_files)}\n\n{master_content}")
 
     summary_path = None
     if master_content.strip():
         topic_prompt = _prompts.get_prompt(prompt_key) or TOPIC_SYNTHESIS_PROMPT
         if progress_callback:
-            progress_callback(f"Synthesizing topic: {folder_name}")
+            progress_callback(f"Synthesizing topic: {topic_name}")
 
         client2 = _llm.create_client_from_config(timeout=180.0)
         try:
@@ -189,11 +316,11 @@ def synthesize_topic(
                 temperature=0.0, timeout=180.0,
             )
             summary = res.choices[0].message.content
-            summary_path = os.path.join(output_dir, f"{folder_name}_SUMMARY.md")
+            summary_path = paths.topic_summary_file(model_root, topic_name)
             with open(summary_path, "w", encoding="utf-8") as f:
-                f.write(f"# TOPIC SUMMARY: {folder_name}\nModel: {model}\nPapers: {len(pdf_files)}\n\n{summary or ''}")
+                f.write(f"# TOPIC SUMMARY: {topic_name}\nModel: {model}\nPapers: {len(pdf_files)}\n\n{summary or ''}")
         except Exception as e:
-            return {"error": f"Topic synthesis failed: {e}", "topic": folder_name}
+            return {"error": f"Topic synthesis failed: {e}", "topic": topic_name}
         finally:
             try:
                 client2._client.close()
@@ -201,35 +328,40 @@ def synthesize_topic(
                 pass
 
     return {
-        "topic": folder_name,
+        "topic": topic_name,
         "total": len(pdf_files),
         "cached": cached,
         "processed": processed,
         "errors": errors,
         "master_report": master_path,
         "summary": summary_path,
+        "model_root": model_root,
     }
 
 
 def synthesize_global(
     output_dir: str = "",
+    *,
+    session_id: str = "",
     prompt_key: str = "global_synthesis_prompt",
     progress_callback=None,
 ) -> dict:
-    """Global cross-topic synthesis across all topic summaries in output_dir."""
-    if not output_dir:
-        base = _config.get("summary_output_dir", os.path.join(_config.get_app_data_dir(), "summaries"))
-        output_dir = os.path.join(base, "synthesis")
+    """Global cross-topic synthesis across all topic summaries in the model root.
 
-    if not os.path.isdir(output_dir):
-        return {"error": f"Directory not found: {output_dir}"}
+    Reads every ``<topic>_SUMMARY.md`` from the model root and writes
+    ``GLOBAL_SUMMARY.md`` there. Path resolution mirrors ``synthesize_topic``.
+    """
+    try:
+        model_root = _resolve_model_root(session_id, output_dir)
+    except ValueError as e:
+        return {"error": str(e)}
+    if not os.path.isdir(model_root):
+        return {"error": f"Directory not found: {model_root}"}
 
     topic_summaries = []
-    for fn in os.listdir(output_dir):
-        if fn.endswith("_SUMMARY.md"):
-            sp = os.path.join(output_dir, fn)
-            tn = fn.replace("_SUMMARY.md", "")
-            topic_summaries.append((tn, sp))
+    for fn in os.listdir(model_root):
+        if fn.endswith("_SUMMARY.md") and fn != "GLOBAL_SUMMARY.md":
+            topic_summaries.append((fn.replace("_SUMMARY.md", ""), os.path.join(model_root, fn)))
 
     if not topic_summaries:
         return {"error": "No topic summaries found"}
@@ -259,10 +391,10 @@ def synthesize_global(
             temperature=0.0, timeout=180.0,
         )
         global_summary = res.choices[0].message.content
-        global_path = os.path.join(output_dir, "GLOBAL_SUMMARY.md")
+        global_path = paths.global_summary_file(model_root)
         with open(global_path, "w", encoding="utf-8") as f:
             f.write(f"# GLOBAL SUMMARY\nModel: {model}\nTopics: {len(topic_summaries)}\n\n{global_summary or ''}")
-        return {"global_summary": global_path, "topics": len(topic_summaries)}
+        return {"global_summary": global_path, "topics": len(topic_summaries), "model_root": model_root}
     except Exception as e:
         return {"error": str(e)}
     finally:
@@ -271,6 +403,8 @@ def synthesize_global(
         except Exception:
             pass
 
+
+# ─── query / enhance / analyze-own-paper (no layout writes) ─────────────────
 
 def generate_queries(
     research_description: str,
@@ -321,14 +455,22 @@ def generate_queries(
 
 def generate_related_work(
     output_dir: str = "",
+    *,
+    session_id: str = "",
     prompt_key: str = "related_work_prompt",
 ) -> dict:
-    """Generate a Related Work section from existing summaries."""
-    if not output_dir:
-        base = _config.get("summary_output_dir", os.path.join(_config.get_app_data_dir(), "summaries"))
-        output_dir = os.path.join(base, "synthesis")
-    os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, "RELATED_WORK.md")
+    """Generate a Related Work section from existing summaries.
+
+    Writes ``RELATED_WORK.md`` to the model root (``<summary>/<session>/<model>/``)
+    so the Check Summaries tab picks it up. Path resolution mirrors
+    ``synthesize_topic``.
+    """
+    try:
+        model_root = _resolve_model_root(session_id, output_dir)
+    except ValueError as e:
+        return {"error": str(e)}
+    os.makedirs(model_root, exist_ok=True)
+    out_path = paths.related_work_file(model_root)
 
     prompt = _prompts.get_prompt(prompt_key)
     if not prompt:
@@ -349,7 +491,7 @@ def generate_related_work(
         text = res.choices[0].message.content or ""
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(f"# RELATED WORK\n\n{text}")
-        return {"path": out_path, "chars": len(text)}
+        return {"path": out_path, "chars": len(text), "model_root": model_root}
     except Exception as e:
         return {"error": str(e)}
     finally:
@@ -361,14 +503,21 @@ def generate_related_work(
 
 def generate_introduction(
     output_dir: str = "",
+    *,
+    session_id: str = "",
     prompt_key: str = "introduction_prompt",
 ) -> dict:
-    """Generate an Introduction section from existing summaries."""
-    if not output_dir:
-        base = _config.get("summary_output_dir", os.path.join(_config.get_app_data_dir(), "summaries"))
-        output_dir = os.path.join(base, "synthesis")
-    os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, "INTRODUCTION.md")
+    """Generate an Introduction section from existing summaries.
+
+    Writes ``INTRODUCTION.md`` to the model root. Path resolution mirrors
+    ``synthesize_topic``.
+    """
+    try:
+        model_root = _resolve_model_root(session_id, output_dir)
+    except ValueError as e:
+        return {"error": str(e)}
+    os.makedirs(model_root, exist_ok=True)
+    out_path = paths.introduction_file(model_root)
 
     prompt = _prompts.get_prompt(prompt_key)
     if not prompt:
@@ -389,7 +538,7 @@ def generate_introduction(
         text = res.choices[0].message.content or ""
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(f"# INTRODUCTION\n\n{text}")
-        return {"path": out_path, "chars": len(text)}
+        return {"path": out_path, "chars": len(text), "model_root": model_root}
     except Exception as e:
         return {"error": str(e)}
     finally:
@@ -437,36 +586,74 @@ def analyze_own_paper(
             pass
 
 
-def list_summaries(summary_dir: str = "") -> list[dict]:
-    """List generated summaries. Returns dicts with path, type, topic, size."""
-    if not summary_dir:
-        summary_dir = _config.get("summary_output_dir", os.path.join(_config.get_app_data_dir(), "summaries"))
-    if not os.path.isdir(summary_dir):
+# ─── summary listing + cache read-back ──────────────────────────────────────
+
+_SUMMARY_TYPES = (
+    ("GLOBAL_SUMMARY.md", "global"),
+    ("RELATED_WORK.md", "related_work"),
+    ("INTRODUCTION.md", "introduction"),
+)
+
+
+def _classify_summary_file(fname: str) -> str:
+    if fname == "GLOBAL_SUMMARY.md":
+        return "global"
+    if fname == "RELATED_WORK.md":
+        return "related_work"
+    if fname == "INTRODUCTION.md":
+        return "introduction"
+    if fname == "MASTER_REPORT.md":
+        return "master"
+    if fname.endswith("_SUMMARY.md"):
+        return "topic"
+    if fname.endswith(".md"):
+        return "per_paper"
+    return ""
+
+
+def list_summaries(summary_dir: str = "", *, session_id: str = "") -> list[dict]:
+    """List generated summaries with their type, topic, and model.
+
+    Session-aware (recommended): pass ``session_id`` to scope the listing to
+    that session's ``<summary>/<session>/`` folder — exactly what the Check
+    Summaries tab shows. Without ``session_id`` the listing walks the whole
+    ``summary_output_dir`` (legacy/flat behaviour, useful for global audits).
+    """
+    if session_id:
+        sn = _session_name(session_id)
+        if not sn:
+            return []
+        root = paths.session_summary_root(_config, sn)
+    else:
+        root = summary_dir or paths.summary_root(_config)
+    if not os.path.isdir(root):
         return []
-    results = []
-    for root, dirs, files in os.walk(summary_dir):
+
+    results: list[dict] = []
+    for dirpath, dirs, files in os.walk(root):
         for fname in files:
-            path = os.path.join(root, fname)
-            ftype = ""
-            if fname == "GLOBAL_SUMMARY.md":
-                ftype = "global"
-            elif fname.endswith("_SUMMARY.md"):
-                ftype = "topic"
-            elif fname == "MASTER_REPORT.md":
-                ftype = "master"
-            elif fname == "RELATED_WORK.md":
-                ftype = "related_work"
-            elif fname == "INTRODUCTION.md":
-                ftype = "introduction"
-            elif fname.endswith(".md"):
-                ftype = "per_paper"
-            else:
+            ftype = _classify_summary_file(fname)
+            if not ftype:
                 continue
-            rel = os.path.relpath(root, summary_dir)
-            topic = rel.split(os.sep)[-1] if rel != "." else ""
+            path = os.path.join(dirpath, fname)
+            rel = os.path.relpath(dirpath, root)
+            # rel is either ".", "<model>", or "<model>/detailed_topic_reviews/<topic>/_cache"
+            parts = [p for p in rel.split(os.sep) if p and p != "."]
+            model = parts[0] if parts else ""
+            topic = ""
+            if "detailed_topic_reviews" in parts:
+                try:
+                    topic = parts[parts.index("detailed_topic_reviews") + 1]
+                except IndexError:
+                    topic = ""
+            elif ftype == "topic":
+                topic = fname.replace("_SUMMARY.md", "")
+            elif ftype == "master":
+                topic = parts[-1] if parts else ""
             results.append({
                 "path": path, "name": fname, "type": ftype,
-                "topic": topic, "size": os.path.getsize(path),
+                "topic": topic, "model": model,
+                "size": os.path.getsize(path),
             })
     return results
 
@@ -518,36 +705,62 @@ def enhance_research(
 
 
 def run_full_pipeline(
-    input_dir: str,
+    input_dir: str = "",
     output_dir: str = "",
+    *,
+    session_id: str = "",
     progress_callback=None,
 ) -> dict:
-    """Run the complete 3-pass pipeline: per-paper → topic synthesis → global synthesis."""
-    if not output_dir:
-        base = _config.get("summary_output_dir", os.path.join(_config.get_app_data_dir(), "summaries"))
-        output_dir = os.path.join(base, "synthesis")
+    """Run the complete 3-pass pipeline: per-paper → topic synthesis → global.
 
-    results = {"per_paper": {}, "topics": [], "global": None}
+    With ``session_id`` the input defaults to the session's downloads and the
+    output lands in ``<summary>/<session>/<model>/``. Each topic subfolder of
+    the input is synthesized in turn (per-paper analysis → topic synthesis),
+    then global synthesis runs across all topic summaries.
+    """
+    # Resolve input.
+    if input_dir:
+        in_root = input_dir
+    elif session_id:
+        sn = _session_name(session_id)
+        if not sn:
+            return {"error": f"Session '{session_id}' not found."}
+        in_root = paths.session_downloads_root(_config, sn)
+    else:
+        return {"error": "Provide input_dir or session_id."}
+
+    if not os.path.isdir(in_root):
+        return {"error": f"Input directory not found: {in_root}"}
+
+    # Resolve model root.
+    try:
+        model_root = _resolve_model_root(session_id, output_dir)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    results = {"per_paper": {}, "topics": [], "global": None, "model_root": model_root}
 
     if progress_callback:
         progress_callback("Step 1: Per-paper analysis + topic synthesis...")
 
-    if os.path.isdir(input_dir):
-        subfolders = [f.path for f in os.scandir(input_dir) if f.is_dir()]
-        for folder_path in subfolders:
-            folder_name = os.path.basename(folder_path)
-            if progress_callback:
-                progress_callback(f"  Processing topic: {folder_name}")
-            topic_result = synthesize_topic(folder_path, output_dir, progress_callback=progress_callback)
-            results["topics"].append({"name": folder_name, "result": topic_result})
-    else:
-        return {"error": f"Input directory not found: {input_dir}"}
+    subfolders = [f.path for f in os.scandir(in_root) if f.is_dir()]
+    for folder_path in subfolders:
+        folder_name = os.path.basename(folder_path)
+        if progress_callback:
+            progress_callback(f"  Processing topic: {folder_name}")
+        topic_result = synthesize_topic(
+            input_dir=folder_path,
+            output_dir=model_root,            # keep all topics under one model root
+            topic_name=folder_name,
+            session_id="",                    # explicit output_dir already resolves it
+            progress_callback=progress_callback,
+        )
+        results["topics"].append({"name": folder_name, "result": topic_result})
 
     if results["topics"] and not any(t["result"].get("error") for t in results["topics"]):
         if progress_callback:
             progress_callback("Step 2: Global synthesis...")
-        global_result = synthesize_global(output_dir, progress_callback=progress_callback)
-        results["global"] = global_result
+        results["global"] = synthesize_global(output_dir=model_root, progress_callback=progress_callback)
 
     return results
 

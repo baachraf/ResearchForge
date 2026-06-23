@@ -1,7 +1,7 @@
 import os
-import re
 from typing import Optional
 from researchforge_api import _config
+from gui import paths
 
 from research_downloader.downloader import Downloader
 from research_downloader.registry import Registry
@@ -26,7 +26,7 @@ def download_paper(
         return None
 
     if not output_dir:
-        output_dir = _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
+        output_dir = paths.output_root(_config)
 
     os.makedirs(output_dir, exist_ok=True)
     registry = Registry(os.path.join(output_dir, "downloads_registry.db"))
@@ -75,27 +75,38 @@ def download_papers(
 
 
 def _output_root() -> str:
-    return _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
+    return paths.output_root(_config)
 
 
 def _sanitize_session_name(name: str) -> str:
-    """Same sanitisation the GUI applies to derive session_download_name
-    (gui/search_tab.py)."""
-    return re.sub(r'[\\/*?:"<>|]', '_', name or "")
+    """Sanitise a session name for use as a folder segment. Delegates to
+    ``paths.session_segment`` so the API and GUI agree exactly."""
+    return paths.session_segment(name)
 
 
 def _topic_dir(session_name: str, output_folder: str) -> str:
     """Per-paper download folder, matching the GUI's layout exactly:
-    output_root / <sanitised session name> / <output_folder (query name)> / .
-    The GUI's _session_root() inserts the session-name segment, and DownloadWorker
-    appends the query's output_folder; this must match so the GUI finds the files."""
-    parts = [_output_root()]
-    sn = _sanitize_session_name(session_name)
-    if sn:
-        parts.append(sn)
-    if output_folder:
-        parts.append(output_folder)
-    return os.path.join(*parts)
+    ``output_root / <sanitised session name> / <output_folder (query name)> /``.
+    Delegates to ``paths.topic_downloads_dir`` so there is one source of truth
+    for the download path contract."""
+    return paths.topic_downloads_dir(_config, session_name, output_folder)
+
+
+def _resolve_session_for_listing(session_id: str, output_dir: str) -> str:
+    """Resolve the directory that list_downloads/list_download_tree should
+    scan. With ``session_id`` it's the session's downloads root (one folder per
+    query topic underneath); without it, it's the explicit ``output_dir`` or
+    the global downloads root (legacy flat behaviour)."""
+    if output_dir:
+        return output_dir
+    if session_id:
+        from researchforge_api import _sessions
+        s = _sessions.load_session(session_id)
+        sn = (s.get("name") if s else "") or ""
+        if not sn:
+            return ""
+        return paths.session_downloads_root(_config, sn)
+    return _output_root()
 
 
 def download_session(session_id: str,
@@ -189,7 +200,7 @@ def refresh_session_downloads(session_id: str) -> dict:
 
 def is_downloaded(paper_id: str, output_dir: str = "") -> bool:
     if not output_dir:
-        output_dir = _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
+        output_dir = paths.output_root(_config)
     if not os.path.isdir(output_dir):
         return False
     registry = Registry(os.path.join(output_dir, "downloads_registry.db"))
@@ -198,37 +209,47 @@ def is_downloaded(paper_id: str, output_dir: str = "") -> bool:
 
 def get_download_path(paper_id: str, output_dir: str = "") -> Optional[str]:
     if not output_dir:
-        output_dir = _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
+        output_dir = paths.output_root(_config)
     registry = Registry(os.path.join(output_dir, "downloads_registry.db"))
     return registry.get_filepath(paper_id)
 
 
-def list_downloads(output_dir: str = "") -> list[dict]:
-    """List all downloaded papers in the output directory."""
-    if not output_dir:
-        output_dir = _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
-    if not os.path.isdir(output_dir):
+def list_downloads(output_dir: str = "", *, session_id: str = "") -> list[dict]:
+    """List all downloaded PDFs.
+
+    Session-aware (recommended): pass ``session_id`` to list only that
+    session's PDFs — exactly what the GUI's Downloaded view shows. Without
+    ``session_id`` it walks the whole ``output_root`` (legacy flat behaviour).
+    """
+    root = _resolve_session_for_listing(session_id, output_dir)
+    if not root or not os.path.isdir(root):
         return []
-    registry = Registry(os.path.join(output_dir, "downloads_registry.db"))
     results = []
-    for root, dirs, files in os.walk(output_dir):
+    for r, _dirs, files in os.walk(root):
         for fname in files:
             if fname.lower().endswith(".pdf"):
-                fpath = os.path.join(root, fname)
+                fpath = os.path.join(r, fname)
                 results.append({"name": fname, "path": fpath, "size_mb": os.path.getsize(fpath) / (1024**2)})
     return results
 
 
-def list_download_tree(output_dir: str = "") -> dict:
-    """List download directory as a topic → papers tree for the Generate Reports tab."""
-    if not output_dir:
-        output_dir = _config.get("output_root", os.path.join(_config.get_app_data_dir(), "downloads"))
-    if not os.path.isdir(output_dir):
+def list_download_tree(output_dir: str = "", *, session_id: str = "") -> dict:
+    """List the download directory as a topic → papers tree.
+
+    Session-aware (recommended): with ``session_id`` the tree is rooted at that
+    session's downloads folder, so its top-level entries are the query topics
+    (matching the GUI's Downloaded tab). Without ``session_id`` it scans the
+    flat ``output_root`` — useful for a global overview, but note that with the
+    GUI's session-scoped layout the top-level entries there are session names,
+    not topics.
+    """
+    root = _resolve_session_for_listing(session_id, output_dir)
+    if not root or not os.path.isdir(root):
         return {"topics": []}
     topics = []
-    for entry in sorted(os.scandir(output_dir), key=lambda e: e.name):
+    for entry in sorted(os.scandir(root), key=lambda e: e.name):
         if entry.is_dir():
             pdfs = [f.name for f in os.scandir(entry.path) if f.is_file() and f.name.lower().endswith(".pdf")]
             if pdfs:
                 topics.append({"name": entry.name, "path": entry.path, "pdfs": sorted(pdfs), "count": len(pdfs)})
-    return {"topics": topics, "dir": output_dir}
+    return {"topics": topics, "dir": root}

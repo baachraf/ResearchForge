@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QColor
 from PySide6.QtCore import Qt, Signal
 from gui.theme_manager import ThemeManager
+from gui import paths
 
 
 class OutputTab(QWidget):
@@ -76,7 +77,7 @@ class OutputTab(QWidget):
         download_name = self.cfg.get("session_download_name", "")
         if not out_dir or not download_name:
             return ""
-        return os.path.join(out_dir, download_name)
+        return paths.session_summary_root(self.cfg, download_name)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -137,14 +138,14 @@ class OutputTab(QWidget):
             t_item.setData(0, Qt.UserRole, summary_path)
             t_item.setExpanded(True)
 
-            master = os.path.join(path, "detailed_topic_reviews", topic_name, "MASTER_REPORT.md")
+            master = paths.topic_master_report(path, topic_name)
             if os.path.isfile(master):
                 m_item = QTreeWidgetItem(t_item)
                 m_item.setText(0, "MASTER_REPORT.md")
                 m_item.setText(1, "Full Report")
                 m_item.setData(0, Qt.UserRole, master)
 
-            cache_dir = os.path.join(path, "detailed_topic_reviews", topic_name, "_cache")
+            cache_dir = paths.topic_cache_dir(path, topic_name)
             if os.path.isdir(cache_dir):
                 for cf in sorted(os.listdir(cache_dir), key=str.lower):
                     if cf.endswith(".md"):

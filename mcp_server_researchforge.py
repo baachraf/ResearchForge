@@ -302,15 +302,19 @@ def rf_refresh_session_downloads(session_id: str) -> dict:
 
 
 @mcp.tool()
-def rf_list_downloads(output_dir: str = "") -> list:
-    """List all downloaded PDFs."""
-    return _safe(rf.list_downloads(output_dir=output_dir))
+def rf_list_downloads(output_dir: str = "", session_id: str = "") -> list:
+    """List all downloaded PDFs. Pass session_id to scope to one session's
+    downloads (matches the GUI's Downloaded view); omit it for a flat walk of
+    the whole output_root."""
+    return _safe(rf.list_downloads(output_dir=output_dir, session_id=session_id))
 
 
 @mcp.tool()
-def rf_list_download_tree(output_dir: str = "") -> dict:
-    """List download directory as topic → papers tree."""
-    return _safe(rf.list_download_tree(output_dir=output_dir))
+def rf_list_download_tree(output_dir: str = "", session_id: str = "") -> dict:
+    """List the download directory as a topic → papers tree. With session_id
+    the tree is rooted at that session's folder (topics = query folders,
+    matching the GUI); without it the tree walks the flat output_root."""
+    return _safe(rf.list_download_tree(output_dir=output_dir, session_id=session_id))
 
 
 @mcp.tool()
@@ -359,27 +363,35 @@ def rf_analyze_own_paper(pdf_path: str) -> dict:
 
 
 @mcp.tool()
-def rf_synthesize_topic(input_dir: str, output_dir: str = "") -> dict:
-    """Synthesize all PDFs in a folder into a topic-level summary (per-paper → topic synthesis)."""
-    return _safe(rf.synthesize_topic(input_dir, output_dir=output_dir))
+def rf_synthesize_topic(input_dir: str = "", output_dir: str = "",
+                        session_id: str = "", topic_name: str = "") -> dict:
+    """Synthesize all PDFs in one topic folder into a topic-level summary
+    (per-paper analysis → topic synthesis). Pass session_id (+ optional
+    topic_name) to write to the GUI's summary/<session>/<model>/ layout; or
+    pass input_dir + output_dir explicitly for raw/ad-hoc use."""
+    return _safe(rf.synthesize_topic(input_dir=input_dir, output_dir=output_dir,
+                                      session_id=session_id, topic_name=topic_name))
 
 
 @mcp.tool()
-def rf_synthesize_global(output_dir: str = "") -> dict:
-    """Global cross-topic synthesis across all topic summaries in the output dir."""
-    return _safe(rf.synthesize_global(output_dir=output_dir))
+def rf_synthesize_global(output_dir: str = "", session_id: str = "") -> dict:
+    """Global cross-topic synthesis across all topic summaries in the model
+    root. Pass session_id to target the GUI's summary/<session>/<model>/ folder."""
+    return _safe(rf.synthesize_global(output_dir=output_dir, session_id=session_id))
 
 
 @mcp.tool()
-def rf_generate_related_work(output_dir: str = "") -> dict:
-    """Generate a Related Work section from existing summaries."""
-    return _safe(rf.generate_related_work(output_dir=output_dir))
+def rf_generate_related_work(output_dir: str = "", session_id: str = "") -> dict:
+    """Generate a Related Work section from existing summaries. Pass session_id
+    to write to the GUI's summary/<session>/<model>/ folder."""
+    return _safe(rf.generate_related_work(output_dir=output_dir, session_id=session_id))
 
 
 @mcp.tool()
-def rf_generate_introduction(output_dir: str = "") -> dict:
-    """Generate an Introduction section from existing summaries."""
-    return _safe(rf.generate_introduction(output_dir=output_dir))
+def rf_generate_introduction(output_dir: str = "", session_id: str = "") -> dict:
+    """Generate an Introduction section from existing summaries. Pass session_id
+    to write to the GUI's summary/<session>/<model>/ folder."""
+    return _safe(rf.generate_introduction(output_dir=output_dir, session_id=session_id))
 
 
 @mcp.tool()
@@ -395,9 +407,14 @@ def rf_enhance_research(research_description: str) -> dict:
 
 
 @mcp.tool()
-def rf_run_full_pipeline(input_dir: str, output_dir: str = "") -> dict:
-    """Run the complete 3-pass pipeline: per-paper analysis → topic synthesis → global synthesis."""
-    return _safe(rf.run_full_pipeline(input_dir, output_dir=output_dir))
+def rf_run_full_pipeline(input_dir: str = "", output_dir: str = "",
+                         session_id: str = "") -> dict:
+    """Run the complete 3-pass pipeline: per-paper analysis → topic synthesis →
+    global synthesis. Pass session_id to read from that session's downloads and
+    write to its summary/<session>/<model>/ folder; or pass input_dir +
+    output_dir explicitly for raw use."""
+    return _safe(rf.run_full_pipeline(input_dir=input_dir, output_dir=output_dir,
+                                       session_id=session_id))
 
 
 @mcp.tool()
@@ -413,9 +430,11 @@ def rf_create_session(name: str, research_description: str,
 # ═══════════════════════════════════════════════════════════════
 
 @mcp.tool()
-def rf_list_summaries(summary_dir: str = "") -> list:
-    """List all generated summaries (global, topic, per-paper, related_work, introduction)."""
-    return _safe(rf.list_summaries(summary_dir=summary_dir))
+def rf_list_summaries(summary_dir: str = "", session_id: str = "") -> list:
+    """List generated summaries (global, topic, per-paper, related_work,
+    introduction). Pass session_id to scope to one session's summary folder
+    (matches the GUI's Check Summaries tab); omit it for a flat walk."""
+    return _safe(rf.list_summaries(summary_dir=summary_dir, session_id=session_id))
 
 
 @mcp.tool()
@@ -447,9 +466,23 @@ def rf_get_section_text(pdf_path: str, section_name: str) -> str:
 
 
 @mcp.tool()
-def rf_save_audit_results(report: str, pdf_path: str = "") -> str:
-    """Save an audit report to a markdown file. Returns the filepath."""
-    return rf.save_audit_results(report, pdf_path=pdf_path)
+def rf_save_audit_results(report: str, pdf_path: str = "", output_dir: str = "",
+                          scores: dict = None, questions: list = None,
+                          questions_text: str = "", model: str = "",
+                          endpoint: str = "", paper_title: str = "",
+                          source_type: str = "pdf", context_index: int = 0,
+                          save_name: str = "") -> dict:
+    """Save an audit report as a GUI-loadable bundle (.json + .md). The .json
+    uses the same ``researchforge.audit/1`` schema as the GUI's Save Results,
+    so it reappears in the GUI's Load Audit dialog. Returns
+    ``{"json_path": ..., "md_path": ...}``. Pass the metadata from
+    rf_audit_paper's result (scores, questions, mode) to populate the bundle."""
+    return rf.save_audit_results(
+        report, pdf_path=pdf_path, output_dir=output_dir,
+        scores=scores, questions=questions, questions_text=questions_text,
+        model=model, endpoint=endpoint, paper_title=paper_title,
+        source_type=source_type, context_index=context_index, save_name=save_name,
+    )
 
 
 if __name__ == "__main__":

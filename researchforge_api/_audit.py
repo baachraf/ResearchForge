@@ -1,6 +1,10 @@
 import os
 import re
+import json
+from datetime import datetime
 from researchforge_api import _config, _llm, _prompts
+from gui import paths
+from gui.app_info import APP_VERSION
 
 
 def detect_sections(pdf_path: str) -> dict:
@@ -183,33 +187,91 @@ def save_audit_results(
     report: str,
     pdf_path: str = "",
     output_dir: str = "",
-) -> str:
-    """Save audit results to a Markdown file. Returns the filepath."""
-    if not output_dir:
-        output_dir = os.path.join(_config.get_app_data_dir(), "audit_results")
-    os.makedirs(output_dir, exist_ok=True)
+    *,
+    scores: dict | None = None,
+    questions: list | None = None,
+    questions_text: str = "",
+    model: str = "",
+    endpoint: str = "",
+    paper_title: str = "",
+    source_type: str = "pdf",
+    context_index: int = 0,
+    save_name: str = "",
+) -> dict:
+    """Save an audit report as a GUI-loadable bundle.
 
-    from datetime import datetime
+    Writes two files to ``<audit_output_dir>/``:
+      * ``<save_name>.json`` — a ``researchforge.audit/1`` bundle identical in
+        schema to what the GUI's "Save Results" writes, so it reappears in the
+        GUI's "Load Audit" dialog.
+      * ``<save_name>.md`` — a human-readable copy.
+
+    ``save_name`` defaults to ``paths.audit_filename(paper_title, source_type)``
+    so API-saved audits are named identically to GUI-saved ones.
+
+    Returns ``{"json_path": ..., "md_path": ...}``.
+    """
+    out_root = output_dir if output_dir else paths.audit_root(_config)
+    os.makedirs(out_root, exist_ok=True)
+
     now = datetime.now()
-    day_name = now.strftime("%A")
-    date_part = now.strftime("%d%b%Y_%H%M%S")
+    base = save_name.strip() or paths.audit_filename(paper_title, source_type=source_type, now=now)
+    # Strip any caller-supplied extension so we control both .json and .md.
+    for ext in (".json", ".md"):
+        if base.lower().endswith(ext):
+            base = base[:-len(ext)]
 
-    title = ""
-    if pdf_path:
-        title = os.path.splitext(os.path.basename(pdf_path))[0]
-        title = "".join(c if c.isalnum() else "_" for c in title)[:60]
-        title = title.strip("_")
+    paper_name = os.path.basename(pdf_path) if pdf_path else ""
+    # questions_text takes precedence (raw block); fall back to joining the list.
+    qtext = questions_text or ""
+    if not qtext and questions:
+        qtext = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
 
-    if title:
-        filename = f"{title}_{day_name}_{date_part}.md"
-    else:
-        filename = f"Audit_{day_name}_{date_part}.md"
+    bundle = {
+        "schema": "researchforge.audit/1",
+        "app_version": APP_VERSION,
+        "saved_at": now.isoformat(timespec="seconds"),
+        "paper": {
+            "name": paper_name,
+            "path": pdf_path or "",
+            "source_type": source_type,
+            "title": paper_title or paper_name,
+        },
+        "audit": {
+            "context_index": context_index,
+            "model": model or _config.get("llm_model", ""),
+            "endpoint": endpoint or _config.get("llm_endpoint", ""),
+            "results": report,
+            "scores": scores or {},
+            "questions": qtext,
+        },
+    }
 
-    filepath = os.path.join(output_dir, filename)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(f"# Paper Audit\nDate: {now.strftime('%Y-%m-%d %H:%M')}\n\n")
-        f.write(report)
-    return filepath
+    json_path = os.path.join(out_root, base + ".json")
+    md_path = os.path.join(out_root, base + ".md")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(bundle, f, ensure_ascii=False, indent=2)
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(_render_audit_markdown(report, paper_name, source_type, qtext, now))
+    return {"json_path": json_path, "md_path": md_path}
+
+
+def _render_audit_markdown(report: str, paper_name: str, source_type: str,
+                           questions_text: str, now: datetime) -> str:
+    """Human-readable markdown copy mirroring the GUI's ``_render_markdown``."""
+    src_label = "LaTeX source" if source_type == "latex" else "PDF"
+    header = (
+        f"# Audit Report\n"
+        f"**File:** {paper_name or 'unknown'}  ({src_label})\n"
+        f"**Date:** {now.strftime('%A, %d %B %Y  %H:%M')}\n\n"
+        + "━" * 60 + "\n\n"
+    )
+    text = header + (report or "").strip()
+    if questions_text:
+        text = (text + "\n\n" + "━" * 60
+                + "\nQUESTIONS FOR THE AUTHOR\n" + "━" * 60 + "\n"
+                + questions_text.strip())
+    return text
 
 
 def _parse_questions(text: str) -> list[str]:

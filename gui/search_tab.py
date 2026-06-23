@@ -23,6 +23,7 @@ from gui.workers import SearchWorker, DownloadWorker, RelevanceScoringWorker
 from gui.llm_provider import get_provider_api_key, ensure_llm_available
 from gui.session_manager import SessionManager
 from gui.session_creator import SessionCreatorDialog
+from gui import paths
 from gui.folder_import import FolderImportDialog, extract_pdf_metadata, copy_pdf_to_topic_root
 
 
@@ -875,9 +876,9 @@ class SearchDownloadTab(QWidget):
         self._session_agentic_log = result.get("agentic_log", "")
         self.cfg.set("our_work_context", self._session_context)
         self.cfg.set("session_intent", self._session_intent)
-        session_folder = re.sub(r'[\\/*?:"<>|]', '_', result["name"]) + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_folder = paths.session_segment(result["name"]) + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
         self.cfg.set("summary_session_folder", session_folder)
-        self.cfg.set("session_download_name", re.sub(r'[\\/*?:"<>|]', '_', result["name"]))
+        self.cfg.set("session_download_name", paths.session_segment(result["name"]))
         self._queries.clear()
         self._search_results.clear()
         self.query_table.setRowCount(0)
@@ -1211,9 +1212,9 @@ class SearchDownloadTab(QWidget):
 
         self.cfg.set("last_session", session_id)
         if not self.cfg.get("summary_session_folder", ""):
-            session_folder = re.sub(r'[\\/*?:"<>|]', '_', data.get("name", "session")) + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_folder = paths.session_segment(data.get("name", "session")) + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
             self.cfg.set("summary_session_folder", session_folder)
-        self.cfg.set("session_download_name", re.sub(r'[\\/*?:"<>|]', '_', data.get("name", "session")))
+        self.cfg.set("session_download_name", paths.session_segment(data.get("name", "session")))
         QTimer.singleShot(0, self._refresh_downloaded_tab)
 
     def _check_result_file(self, paper: dict) -> bool:
@@ -2138,13 +2139,8 @@ class SearchDownloadTab(QWidget):
     # ── Download ──
 
     def _session_root(self) -> str:
-        base = self.cfg.get("output_root", "")
-        if not base:
-            base = os.path.join(os.path.expanduser("~"), ".ResearchForge", "downloads")
         session_name = self.cfg.get("session_download_name", "")
-        if session_name:
-            return os.path.join(base, session_name)
-        return base
+        return paths.session_downloads_root(self.cfg, session_name)
 
     def _on_results_tab_changed(self, index: int):
         if index == 1:

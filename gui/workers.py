@@ -36,6 +36,7 @@ from research_downloader.sources.openalex_source import OpenAlexSource
 from research_downloader.sources.crossref_source import CrossRefSource
 from research_downloader.sources.europe_pmc_source import EuropePmcSource
 from research_downloader.sources.core_source import CoreSource
+from gui import paths
 from research_downloader.relevance_filter import (
     passes_title_filter,
     passes_content_filter,
@@ -898,7 +899,7 @@ class LLMProcessWorker(QThread):
         self._stop = True
 
     def _do_global_synthesis(self, client, topic_summaries):
-        global_path = os.path.join(self.output_path, "GLOBAL_SUMMARY.md")
+        global_path = paths.global_summary_file(self.output_path)
         if not self._force_rerun and os.path.exists(global_path):
             self.progress.emit(f"Global synthesis cached: {global_path}")
             self.global_summary_done.emit(global_path)
@@ -957,7 +958,7 @@ class LLMProcessWorker(QThread):
                 return
 
             if self._run_mode == "related_work_custom":
-                path = os.path.join(self.output_path, "RELATED_WORK.md")
+                path = paths.related_work_file(self.output_path)
                 if not self._force_rerun and os.path.isfile(path):
                     self.progress.emit("Related Work section already exists — skipping.")
                     self.global_summary_done.emit(path)
@@ -982,7 +983,7 @@ class LLMProcessWorker(QThread):
                 return
 
             if self._run_mode == "introduction_custom":
-                path = os.path.join(self.output_path, "INTRODUCTION.md")
+                path = paths.introduction_file(self.output_path)
                 if not self._force_rerun and os.path.isfile(path):
                     self.progress.emit("Introduction section already exists — skipping.")
                     self.global_summary_done.emit(path)
@@ -1020,7 +1021,7 @@ class LLMProcessWorker(QThread):
                 return
 
             model_output_dir = self.output_path
-            detailed_dir = os.path.join(model_output_dir, "detailed_topic_reviews")
+            detailed_dir = paths.topic_reviews_parent(model_output_dir)
             os.makedirs(detailed_dir, exist_ok=True)
             self.progress.emit(f"Input: {self.input_path}")
             self.progress.emit(f"Cache dir: {detailed_dir}")
@@ -1047,8 +1048,8 @@ class LLMProcessWorker(QThread):
                 if not pdf_files:
                     continue
 
-                topic_dir = os.path.join(detailed_dir, folder_name)
-                cache_dir = os.path.join(topic_dir, "_cache")
+                topic_dir = paths.topic_reviews_dir(model_output_dir, folder_name)
+                cache_dir = paths.topic_cache_dir(model_output_dir, folder_name)
                 os.makedirs(cache_dir, exist_ok=True)
                 if self._force_rerun:
                     for f in os.listdir(cache_dir):
@@ -1122,7 +1123,7 @@ class LLMProcessWorker(QThread):
                             score_match = re.search(r'\*\*Relevance Score:\s*(\d{1,3})/100\*\*', analysis)
                             if score_match:
                                 score_val = int(score_match.group(1))
-                                scores_path = os.path.join(model_output_dir, "_relevance_scores.json")
+                                scores_path = paths.relevance_scores_file(model_output_dir)
                                 scores = {}
                                 if os.path.isfile(scores_path):
                                     try:
@@ -1165,12 +1166,12 @@ class LLMProcessWorker(QThread):
                             body = fh.read().strip()
                         master_content += f"\n### PAPER: {pdf}\n\n{body}\n\n{'-'*60}\n"
 
-                master_path = os.path.join(topic_dir, "MASTER_REPORT.md")
+                master_path = paths.topic_master_report(model_output_dir, folder_name)
                 with open(master_path, 'w', encoding='utf-8') as fh:
                     fh.write(f"# MASTER REPORT: {folder_name}\nModel: {self.model_id}\nPapers: {len(pdf_files)}\n\n{master_content}")
                 self.progress.emit(f"  MASTER_REPORT saved: {master_path}")
 
-                summary_path = os.path.join(model_output_dir, f"{folder_name}_SUMMARY.md")
+                summary_path = paths.topic_summary_file(model_output_dir, folder_name)
                 if master_content.strip() and not self._stop and self._run_mode in ("topic", "global", "all"):
                     cached_paper_count = -1
                     if not self._force_rerun and os.path.exists(summary_path):
@@ -1207,7 +1208,7 @@ class LLMProcessWorker(QThread):
                             timeout=180.0,
                         )
                         summary = res.choices[0].message.content
-                        summary_path = os.path.join(model_output_dir, f"{folder_name}_SUMMARY.md")
+                        summary_path = paths.topic_summary_file(model_output_dir, folder_name)
                         with open(summary_path, 'w', encoding='utf-8') as fh:
                             fh.write(f"# TOPIC SUMMARY: {folder_name}\nModel: {self.model_id}\nPapers: {len(pdf_files)}\n\n{summary if summary else ''}")
                         topic_summaries.append((folder_name, summary_path))

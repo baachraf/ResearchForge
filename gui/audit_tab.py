@@ -33,6 +33,7 @@ from gui.llm_provider import (
     ensure_llm_available, provider_name_from_config,
 )
 from gui.app_info import APP_VERSION
+from gui import paths
 
 def _detect_pdf_title(pdf_path: str) -> str:
     """Return the paper title from a PDF or LaTeX file.
@@ -97,32 +98,18 @@ def _detect_pdf_title(pdf_path: str) -> str:
 def _title_to_slug(title: str, max_words: int = 6, min_words: int = 4,
                    max_chars: int = 55) -> str:
     """Convert a paper title to an underscore-separated filename slug.
-    Always includes at least min_words words; stops at max_chars only after that."""
-    cleaned = re.sub(r"[^\w\s-]", " ", title, flags=re.UNICODE)
-    words = [w for w in cleaned.split() if len(w) > 1]
-    slug = ""
-    for i, word in enumerate(words[:max_words]):
-        candidate = (slug + "_" + word) if slug else word
-        if i >= min_words and len(candidate) > max_chars:
-            break
-        slug = candidate
-    return slug
+    Thin wrapper around ``paths.title_to_slug`` so existing call sites keep
+    working; the canonical implementation lives in ``gui.paths`` so the
+    headless API produces identical slugs."""
+    return paths.title_to_slug(title, max_words=max_words, min_words=min_words,
+                               max_chars=max_chars)
 
 
 def _make_audit_filename(title: str, source_type: str = "pdf") -> str:
-    """Build the default save name:
-    audit_report_<title_slug>_<pdf|latex>_<DayName>_<DD>_<Mon>_<YYYY>_<HHMMSS>
-    Example: audit_report_Spatial_Artifact_Coherence_latex_Saturday_30_May_2026_071140
-    """
-    now = datetime.now()
-    timestamp = now.strftime(f"%A_%d_%b_%Y_%H%M%S")   # Saturday_30_May_2026_071140
-    slug = _title_to_slug(title) if title else ""
-    parts = ["audit_report"]
-    if slug:
-        parts.append(slug)
-    parts.append(source_type)
-    parts.append(timestamp)
-    return "_".join(parts)
+    """Build the default audit save name. Delegates to ``paths.audit_filename``
+    so the GUI and the API produce byte-identical filenames (and API-saved
+    bundles appear in the GUI's Load Audit dialog)."""
+    return paths.audit_filename(title, source_type=source_type)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -362,8 +349,7 @@ class _ScorePanel(QFrame):
 
 
 def _resolve_audit_dir(cfg) -> Path:
-    d = cfg.get("audit_output_dir", "").strip()
-    return Path(d) if d else Path.home() / ".ResearchForge" / "audit_results"
+    return Path(paths.audit_root(cfg))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

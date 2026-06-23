@@ -16,6 +16,7 @@ from gui.llm_provider import (
     create_llm_client, get_provider_api_key, check_provider_connection,
     ensure_llm_available,
 )
+from gui import paths
 
 
 class SummarizeTab(QWidget):
@@ -373,18 +374,29 @@ class SummarizeTab(QWidget):
             parts.append("Skip any paper that does not match at least one of these lenses.")
         return "\n".join(parts)
 
+    def _effective_session_name(self) -> str:
+        """The session-name segment used for path construction, with a legacy-
+        field fallback. Reads ``session_download_name`` (set when a session is
+        opened in the Search tab); if empty, tries the older
+        ``summary_session_folder`` field and strips its timestamp suffix.
+        Returns "" when no session is active."""
+        name = self.cfg.get("session_download_name", "")
+        if not name:
+            legacy = self.cfg.get("summary_session_folder", "")
+            if legacy:
+                name = re.sub(r'_\d{8}_\d{6}$', '', legacy)
+        return name
+
     def _refresh_tree(self):
         self.paper_tree.clear()
-        output_root = self.cfg.get("output_root", "")
-        download_name = self.cfg.get("session_download_name", "")
+        download_name = self._effective_session_name()
         if not download_name:
-            summary_session = self.cfg.get("summary_session_folder", "")
-            if summary_session:
-                download_name = re.sub(r'_\d{8}_\d{6}$', '', summary_session)
-        if not output_root or not download_name:
             self.log.emit("No session loaded. Open a session in Search tab first.")
             return
-        in_dir = os.path.join(output_root, download_name)
+        if not self.cfg.get("summary_output_dir", "").strip():
+            self.log.emit("Summary output directory not set.")
+            return
+        in_dir = paths.session_downloads_root(self.cfg, download_name)
         if not os.path.isdir(in_dir):
             self.log.emit(f"Session folder not found: {in_dir}")
             return
@@ -393,12 +405,7 @@ class SummarizeTab(QWidget):
             self.log.emit("No topic subfolders found.")
             return
         model = self.cfg.get("llm_model", "default")
-        safe_model = re.sub(r'[\\/*?:"<>|.]', '_', model)
-        out_dir = self.cfg.get("summary_output_dir", "").strip()
-        if not out_dir:
-            self.log.emit("Summary output directory not set.")
-            return
-        base_path = os.path.join(out_dir, download_name, safe_model)
+        base_path = paths.model_output_root(self.cfg, download_name, model)
         self.log.emit(f"Active model: {model} → {base_path}")
         total_pdfs = 0
         total_cached = 0
@@ -410,8 +417,8 @@ class SummarizeTab(QWidget):
             if not pdf_files:
                 continue
 
-            cache_base = os.path.join(base_path, "detailed_topic_reviews", folder_name, "_cache")
-            topic_summary_path = os.path.join(base_path, f"{folder_name}_SUMMARY.md")
+            cache_base = paths.topic_cache_dir(base_path, folder_name)
+            topic_summary_path = paths.topic_summary_file(base_path, folder_name)
             has_summary = os.path.isfile(topic_summary_path)
             if has_summary:
                 topics_with_summary += 1
@@ -457,7 +464,7 @@ class SummarizeTab(QWidget):
         summary_text = f"{total_pdfs} papers, {total_cached} analyzed  |  {topics_with_summary}/{len(subfolders)} topics synthesized"
         self.lbl_progress.setText(summary_text)
 
-        global_path = os.path.join(base_path, "GLOBAL_SUMMARY.md")
+        global_path = paths.global_summary_file(base_path)
         if os.path.isfile(global_path):
             item = QTreeWidgetItem(self.paper_tree)
             font = item.font(0); font.setBold(True); item.setFont(0, font)
@@ -465,7 +472,7 @@ class SummarizeTab(QWidget):
             item.setText(1, "Done")
             item.setForeground(1, Qt.darkGreen)
 
-        rw_path = os.path.join(base_path, "RELATED_WORK.md")
+        rw_path = paths.related_work_file(base_path)
         if os.path.isfile(rw_path):
             item = QTreeWidgetItem(self.paper_tree)
             font = item.font(0); font.setBold(True); item.setFont(0, font)
@@ -476,12 +483,9 @@ class SummarizeTab(QWidget):
         self.log.emit("Paper tree refreshed.")
 
     def _pipeline_status(self, model_output_root):
-        topics_dir = os.path.join(model_output_root, "detailed_topic_reviews")
         lines = ["── Pipeline Status ──"]
 
-        output_root = self.cfg.get("output_root", "")
-        download_name = self.cfg.get("session_download_name", "")
-        in_dir = os.path.join(output_root, download_name)
+        in_dir = paths.session_downloads_root(self.cfg, self._effective_session_name())
 
         total_papers = 0
         cached_papers = 0
@@ -497,25 +501,25 @@ class SummarizeTab(QWidget):
             if not os.path.isdir(sf_path):
                 continue
             total_papers += len([p for p in os.listdir(sf_path) if p.lower().endswith(".pdf")])
-            cache_path = os.path.join(topics_dir, sf, "_cache")
+            cache_path = paths.topic_cache_dir(model_output_root, sf)
             if os.path.isdir(cache_path):
                 for cf in os.listdir(cache_path):
                     if cf.endswith(".md"):
                         cached_papers += 1
                     elif cf.endswith(".skipped"):
                         skipped_papers += 1
-            summary_path = os.path.join(model_output_root, f"{sf}_SUMMARY.md")
+            summary_path = paths.topic_summary_file(model_output_root, sf)
             if os.path.isfile(summary_path):
                 topics_with_summary += 1
 
         pending_papers = total_papers - cached_papers - skipped_papers
         lines.append(f"Papers: {total_papers} total | {cached_papers} analyzed | {skipped_papers} skipped | {pending_papers} pending")
         lines.append(f"Topic summaries: {topics_with_summary}/{topics_count} done")
-        gs = os.path.join(model_output_root, "GLOBAL_SUMMARY.md")
+        gs = paths.global_summary_file(model_output_root)
         lines.append(f"Global summary: {'Done' if os.path.isfile(gs) else 'Not yet'}")
-        rw = os.path.join(model_output_root, "RELATED_WORK.md")
+        rw = paths.related_work_file(model_output_root)
         lines.append(f"Related work: {'Done' if os.path.isfile(rw) else 'Not yet'}")
-        intro = os.path.join(model_output_root, "INTRODUCTION.md")
+        intro = paths.introduction_file(model_output_root)
         lines.append(f"Introduction: {'Done' if os.path.isfile(intro) else 'Not yet'}")
         lines.append("──")
         return "\n".join(lines)
@@ -532,32 +536,25 @@ class SummarizeTab(QWidget):
         api_key = get_provider_api_key(provider_name, self.cfg)
         endpoint = self.cfg.get("llm_endpoint", "")
 
-        output_root = self.cfg.get("output_root", "")
-        download_name = self.cfg.get("session_download_name", "")
-        if not download_name:
-            summary_session = self.cfg.get("summary_session_folder", "")
-            if summary_session:
-                download_name = re.sub(r'_\d{8}_\d{6}$', '', summary_session)
-        if not output_root or not download_name:
+        download_name = self._effective_session_name()
+        if not self.cfg.get("output_root", "").strip() or not download_name:
             QMessageBox.warning(self, "Missing Input", "Set Output directory and load a session in the Search tab first.")
             return
-        in_dir = os.path.join(output_root, download_name)
+        in_dir = paths.session_downloads_root(self.cfg, download_name)
         if not os.path.isdir(in_dir):
             QMessageBox.warning(self, "Missing Input", f"Session folder not found:\n{in_dir}")
             return
-        out_dir = self.cfg.get("summary_output_dir", "").strip()
-        if not out_dir:
+        if not self.cfg.get("summary_output_dir", "").strip():
             QMessageBox.warning(self, "Missing Input", "Set Summary Output directory in Settings first.")
             return
         model = self.cfg.get("llm_model", "default")
-        safe_model = re.sub(r'[\\/*?:"<>|.]', '_', model)
-        model_output_root = os.path.join(out_dir, download_name, safe_model)
-        cache_root = os.path.join(model_output_root, "detailed_topic_reviews")
+        model_output_root = paths.model_output_root(self.cfg, download_name, model)
+        cache_root = paths.topic_reviews_parent(model_output_root)
 
         existing = 0
         if os.path.isdir(cache_root):
             for fld in os.listdir(cache_root):
-                cp = os.path.join(cache_root, fld, "_cache")
+                cp = paths.topic_cache_dir(model_output_root, fld)
                 if os.path.isdir(cp):
                     existing += len([f for f in os.listdir(cp) if f.endswith(".md")])
 
@@ -740,16 +737,15 @@ class SummarizeTab(QWidget):
         mode = getattr(self, '_selected_mode', 'per_paper')
 
         launching_next = False
-        out_dir = self.cfg.get("summary_output_dir", "").strip()
-        download_name = self.cfg.get("session_download_name", "")
-        safe_model = re.sub(r'[\\/*?:"<>|.]', '_', self.cfg.get("llm_model", "default"))
-        intro_path = os.path.join(out_dir, download_name, safe_model, "INTRODUCTION.md")
+        download_name = self._effective_session_name()
+        model_root = paths.model_output_root(self.cfg, download_name, self.cfg.get("llm_model", "default"))
+        intro_path = paths.introduction_file(model_root)
         endpoint = self.cfg.get("llm_endpoint", "")
         model = self.cfg.get("llm_model", "")
         _pn = self.cfg.get("llm_provider", "LM Studio")
         _ak = get_provider_api_key(_pn, self.cfg)
         if mode == "all":
-            rw_path = os.path.join(out_dir, download_name, safe_model, "RELATED_WORK.md")
+            rw_path = paths.related_work_file(model_root)
             if not os.path.isfile(rw_path) and endpoint and model:
                 launching_next = True
                 self._selected_mode = "related_work"
@@ -815,37 +811,30 @@ class SummarizeTab(QWidget):
                 "No LLM model is configured.\n\n"
                 "Set the provider, endpoint and model in the Settings tab.")
             return
-        output_root = self.cfg.get("output_root", "")
-        download_name = self.cfg.get("session_download_name", "")
+        download_name = self._effective_session_name()
         if not download_name:
-            summary_session = self.cfg.get("summary_session_folder", "")
-            if summary_session:
-                download_name = re.sub(r'_\d{8}_\d{6}$', '', summary_session)
-        in_dir = os.path.join(output_root, download_name)
-        out_dir = self.cfg.get("summary_output_dir", "").strip()
-        if not out_dir:
+            QMessageBox.warning(self, "Missing Input", "Load a session in the Search tab first.")
+            return
+        in_dir = paths.session_downloads_root(self.cfg, download_name)
+        if not self.cfg.get("summary_output_dir", "").strip():
             QMessageBox.warning(self, "Missing Input", "Set Summary Output directory in Settings first.")
             return
         model = self.cfg.get("llm_model", "default")
-        safe_model = re.sub(r'[\\/*?:"<>|.]', '_', model)
-        model_output_root = os.path.join(out_dir, download_name, safe_model)
+        model_output_root = paths.model_output_root(self.cfg, download_name, model)
 
-        global_path = os.path.join(model_output_root, "GLOBAL_SUMMARY.md")
+        global_path = paths.global_summary_file(model_output_root)
         source_text = ""
         if os.path.isfile(global_path):
             with open(global_path, "r", encoding="utf-8") as f:
                 source_text = f.read()
         else:
-            summaries_dir = os.path.join(model_output_root, "detailed_topic_reviews")
+            summaries_dir = paths.topic_reviews_parent(model_output_root)
             if not os.path.isdir(summaries_dir):
                 QMessageBox.warning(self, "No Summaries", "Run Global synthesis first (or at least Per-Paper).")
                 return
             parts = []
             for folder in sorted(os.listdir(summaries_dir)):
-                folder_path = os.path.join(summaries_dir, folder)
-                if not os.path.isdir(folder_path):
-                    continue
-                cache_path = os.path.join(folder_path, "_cache")
+                cache_path = paths.topic_cache_dir(model_output_root, folder)
                 if os.path.isdir(cache_path):
                     md_files = sorted([f for f in os.listdir(cache_path) if f.endswith(".md")])
                     for mf in md_files:
@@ -907,29 +896,22 @@ class SummarizeTab(QWidget):
                 "No LLM model is configured.\n\n"
                 "Set the provider, endpoint and model in the Settings tab.")
             return
-        output_root = self.cfg.get("output_root", "")
-        download_name = self.cfg.get("session_download_name", "")
+        download_name = self._effective_session_name()
         if not download_name:
-            summary_session = self.cfg.get("summary_session_folder", "")
-            if summary_session:
-                download_name = re.sub(r'_\d{8}_\d{6}$', '', summary_session)
-        in_dir = os.path.join(output_root, download_name)
-        out_dir = self.cfg.get("summary_output_dir", "").strip()
-        if not out_dir:
+            QMessageBox.warning(self, "Missing Input", "Load a session in the Search tab first.")
+            return
+        in_dir = paths.session_downloads_root(self.cfg, download_name)
+        if not self.cfg.get("summary_output_dir", "").strip():
             QMessageBox.warning(self, "Missing Input", "Set Summary Output directory in Settings first.")
             return
         model = self.cfg.get("llm_model", "default")
-        safe_model = re.sub(r'[\\/*?:"<>|.]', '_', model)
-        model_output_root = os.path.join(out_dir, download_name, safe_model)
+        model_output_root = paths.model_output_root(self.cfg, download_name, model)
 
         parts = []
-        summaries_dir = os.path.join(model_output_root, "detailed_topic_reviews")
+        summaries_dir = paths.topic_reviews_parent(model_output_root)
         if os.path.isdir(summaries_dir):
             for folder in sorted(os.listdir(summaries_dir)):
-                folder_path = os.path.join(summaries_dir, folder)
-                if not os.path.isdir(folder_path):
-                    continue
-                cache_path = os.path.join(folder_path, "_cache")
+                cache_path = paths.topic_cache_dir(model_output_root, folder)
                 if os.path.isdir(cache_path):
                     for mf in sorted(os.listdir(cache_path)):
                         if mf.endswith(".md"):
