@@ -453,6 +453,65 @@ def generate_queries(
     return {"raw": text, "queries": queries, "count": len(queries)}
 
 
+def _session_context_intent(session_id: str) -> tuple[str, str]:
+    """Pull (context, intent) for prompt-placeholder filling.
+
+    Prefers the session's own ``context``/``intent`` fields; falls back to the
+    global ``our_work_context`` setting when no session is given or the session
+    has no context. Mirrors the GUI's ``_get_research_context`` resolution.
+    """
+    if not session_id:
+        return (_config.get("our_work_context", "") or ""), ""
+    from researchforge_api import _sessions
+    s = _sessions.load_session(session_id) or {}
+    context = (s.get("context") or "").strip() or (_config.get("our_work_context", "") or "")
+    intent = (s.get("intent") or "").strip()
+    return context, intent
+
+
+def _gather_per_paper_analyses(model_root: str) -> str:
+    """Concatenate every per-paper analysis (.md) from
+    ``<model_root>/detailed_topic_reviews/<topic>/_cache/``.
+
+    Mirrors the GUI's ``_on_introduction`` gathering: each topic's cache is
+    read in sorted order, joined with a separator. Returns "" if none found.
+    """
+    parts: list[str] = []
+    parent = paths.topic_reviews_parent(model_root)
+    if os.path.isdir(parent):
+        for folder in sorted(os.listdir(parent)):
+            cache = paths.topic_cache_dir(model_root, folder)
+            if not os.path.isdir(cache):
+                continue
+            for mf in sorted(os.listdir(cache)):
+                if mf.endswith(".md"):
+                    try:
+                        with open(os.path.join(cache, mf), "r", encoding="utf-8") as f:
+                            parts.append(f.read().strip())
+                    except OSError:
+                        pass
+    return "\n\n---\n\n".join(parts)
+
+
+def _gather_related_work_source(model_root: str) -> str:
+    """Source text for the related-work prompt.
+
+    Prefers the GLOBAL_SUMMARY.md (the GUI's first choice), falling back to the
+    concatenated per-paper analyses when no global synthesis exists yet.
+    Returns "" if neither is available.
+    """
+    global_path = paths.global_summary_file(model_root)
+    if os.path.isfile(global_path):
+        try:
+            with open(global_path, "r", encoding="utf-8") as f:
+                txt = f.read().strip()
+            if txt:
+                return txt
+        except OSError:
+            pass
+    return _gather_per_paper_analyses(model_root)
+
+
 def generate_related_work(
     output_dir: str = "",
     *,
@@ -461,9 +520,10 @@ def generate_related_work(
 ) -> dict:
     """Generate a Related Work section from existing summaries.
 
-    Writes ``RELATED_WORK.md`` to the model root (``<summary>/<session>/<model>/``)
-    so the Check Summaries tab picks it up. Path resolution mirrors
-    ``synthesize_topic``.
+    Gathers the global synthesis (or, failing that, the per-paper analyses)
+    plus the session's context/intent, fills the ``{context}``/``{intent}``/
+    ``{topic_summaries}`` placeholders, then runs the LLM. Mirrors the GUI's
+    ``_on_related_work``. Writes ``RELATED_WORK.md`` to the model root.
     """
     try:
         model_root = _resolve_model_root(session_id, output_dir)
@@ -476,16 +536,23 @@ def generate_related_work(
     if not prompt:
         return {"error": f"Prompt '{prompt_key}' not found"}
 
-    context = _config.get("our_work_context", "")
-    if context:
-        prompt = prompt + "\n\n" + context
+    source_text = _gather_related_work_source(model_root)
+    if not source_text.strip():
+        return {"error": "No summaries found. Run synthesize_topic or synthesize_global first."}
+
+    context, intent = _session_context_intent(session_id)
+    full_prompt = prompt.format(
+        context=context,
+        intent=intent or "Not specified",
+        topic_summaries=source_text,
+    )
 
     client = _llm.create_client_from_config(timeout=180.0)
     model = _config.get("llm_model", "")
     try:
         res = client.chat.completions.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": full_prompt}],
             temperature=0.3, max_tokens=60000, timeout=180.0,
         )
         text = res.choices[0].message.content or ""
@@ -507,10 +574,12 @@ def generate_introduction(
     session_id: str = "",
     prompt_key: str = "introduction_prompt",
 ) -> dict:
-    """Generate an Introduction section from existing summaries.
+    """Generate an Introduction section from existing per-paper analyses.
 
-    Writes ``INTRODUCTION.md`` to the model root. Path resolution mirrors
-    ``synthesize_topic``.
+    Gathers every per-paper analysis from ``detailed_topic_reviews/<topic>/_cache/``
+    plus the session's context/intent, fills the ``{context}``/``{intent}``/
+    ``{paper_analyses}`` placeholders, then runs the LLM. Mirrors the GUI's
+    ``_on_introduction``. Writes ``INTRODUCTION.md`` to the model root.
     """
     try:
         model_root = _resolve_model_root(session_id, output_dir)
@@ -523,16 +592,23 @@ def generate_introduction(
     if not prompt:
         return {"error": f"Prompt '{prompt_key}' not found"}
 
-    context = _config.get("our_work_context", "")
-    if context:
-        prompt = prompt + "\n\n" + context
+    paper_analyses = _gather_per_paper_analyses(model_root)
+    if not paper_analyses.strip():
+        return {"error": "No per-paper analyses found. Run synthesize_topic first."}
+
+    context, intent = _session_context_intent(session_id)
+    full_prompt = prompt.format(
+        context=context,
+        intent=intent or "Not specified",
+        paper_analyses=paper_analyses,
+    )
 
     client = _llm.create_client_from_config(timeout=180.0)
     model = _config.get("llm_model", "")
     try:
         res = client.chat.completions.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": full_prompt}],
             temperature=0.3, max_tokens=60000, timeout=180.0,
         )
         text = res.choices[0].message.content or ""
