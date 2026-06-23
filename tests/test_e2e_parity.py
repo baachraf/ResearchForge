@@ -69,6 +69,19 @@ class TestEndToEndParity(unittest.TestCase):
         for d in (self.app_data, self.dl_root, self.sum_root):
             os.makedirs(d)
 
+        # Capture the REAL settings path & back it up BEFORE any redirection.
+        # ConfigManager's default config_path arg is bound at module-import time,
+        # so patching cm.SETTINGS_PATH alone does NOT stop ConfigManager() from
+        # writing the real file — we must (a) pass config_path explicitly and
+        # (b) redirect the API's _get_cfg singleton, and (c) keep this backup as
+        # a belt-and-suspenders restore so the real user config is never touched.
+        import shutil
+        self._real_settings_path = cm.SETTINGS_PATH
+        self._settings_backup = None
+        if os.path.isfile(self._real_settings_path):
+            self._settings_backup = self._real_settings_path + ".testbak"
+            shutil.copy2(self._real_settings_path, self._settings_backup)
+
         self._orig_constants = {
             "APP_DATA_DIR": cm.APP_DATA_DIR,
             "SETTINGS_PATH": cm.SETTINGS_PATH,
@@ -92,13 +105,23 @@ class TestEndToEndParity(unittest.TestCase):
         _c._cfg = None
         _s._mgr = None
 
-        # Real ConfigManager, real settings, pointing at temp.
-        self.cfg = ConfigManager()
+        # Real ConfigManager, explicit temp config_path (NOT the import-bound
+        # default) so writes land in temp, never in the user's real settings.
+        self.cfg = ConfigManager(config_path=cm.SETTINGS_PATH)
         self.cfg.set("output_root", self.dl_root)
         self.cfg.set("summary_output_dir", self.sum_root)
         self.cfg.set("llm_model", "test-model")
         self.cfg.set("llm_provider", "LM Studio")
         self.cfg.set("llm_endpoint", "http://127.0.0.1:1234/v1")
+
+        # CRITICAL: force the API's config singleton onto the temp ConfigManager
+        # too, so every _config.get/set_ call inside the API uses temp paths.
+        # Without this, _get_cfg() would build a ConfigManager() at the real
+        # (import-bound) SETTINGS_PATH and the test would only pass by polluting
+        # the user's real settings — which is how this test originally leaked.
+        self._get_cfg_patch = mock.patch(
+            "researchforge_api._config._get_cfg", return_value=self.cfg)
+        self._get_cfg_patch.start()
 
     def _copy_bundled_prompts(self):
         bundled = cm.resource(os.path.join("config", "prompts"))
@@ -109,11 +132,20 @@ class TestEndToEndParity(unittest.TestCase):
                     shutil.copy2(os.path.join(bundled, f), os.path.join(cm.PROMPTS_DIR, f))
 
     def tearDown(self):
+        # Stop the _get_cfg redirection first.
+        try:
+            self._get_cfg_patch.stop()
+        except RuntimeError:
+            pass
         cm.APP_DATA_DIR = self._orig_constants["APP_DATA_DIR"]
         cm.SETTINGS_PATH = self._orig_constants["SETTINGS_PATH"]
         cm.PROMPTS_DIR = self._orig_constants["PROMPTS_DIR"]
         cm.SESSIONS_DIR = self._orig_constants["SESSIONS_DIR"]
         import shutil
+        # Belt-and-suspenders: restore the real settings.json from backup if the
+        # test touched it for any reason.
+        if self._settings_backup and os.path.isfile(self._settings_backup):
+            shutil.move(self._settings_backup, self._real_settings_path)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _patch_llm(self):
