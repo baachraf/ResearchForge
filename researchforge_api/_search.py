@@ -127,9 +127,18 @@ def lookup_by_title(
     titles: list[str],
     sources: Optional[list[str]] = None,
     progress_callback=None,
+    *,
+    session_id: str = "",
 ) -> dict:
     """Look up papers by exact/fuzzy title across sources.
-    Returns dict with found papers and not_found titles."""
+    Returns dict with found papers and not_found titles.
+
+    When ``session_id`` is given, mirrors the GUI's Find Papers flow:
+    found papers are registered as results (under a ``found_by_title`` query),
+    and not-found titles are added to the session as quoted-title search queries
+    — so the session opened in the GUI shows both the resolved papers and the
+    pending lookups.
+    """
     if sources is None:
         sources = ["arxiv", "brave", "web"]
 
@@ -177,12 +186,39 @@ def lookup_by_title(
         if progress_callback:
             progress_callback(f"Looked up: {title[:60]}")
 
-    return {
-        "found": list(found.values()),
+    found_list = list(found.values())
+    result = {
+        "found": found_list,
         "not_found": not_found,
         "total": len(titles),
         "matched": len(found),
     }
+
+    # Persist into the session (GUI Find-Papers parity): found → results under a
+    # 'found_by_title' query; not_found → quoted-title search queries.
+    if session_id and (found_list or not_found):
+        try:
+            from researchforge_api import _sessions
+            qkey = "found_by_title"
+            if found_list:
+                # Ensure the query row exists, then register the hits.
+                existing = _sessions.get_session_queries(session_id) or []
+                if not any((q.get("name") or "") == qkey for q in existing):
+                    _sessions.add_query_to_session(
+                        session_id, "Papers found by title lookup",
+                        name=qkey, topic="Find Papers")
+                _sessions.set_session_results(
+                    session_id, found_list, query_key=qkey, append=True)
+            for t in not_found:
+                _sessions.add_query_to_session(
+                    session_id, f'"{t}"',
+                    name=re.sub(r"[^0-9A-Za-z]", "_", t)[:40].strip("_") or "lookup",
+                    topic="Find Papers")
+            result["persisted_to_session"] = session_id
+        except Exception as e:
+            result["persist_error"] = str(e)
+
+    return result
 
 
 def filter_papers(

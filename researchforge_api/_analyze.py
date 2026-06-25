@@ -627,8 +627,17 @@ def generate_introduction(
 def analyze_own_paper(
     pdf_path: str,
     prompt_key: str = "analyze_own_paper_prompt",
+    *,
+    session_id: str = "",
 ) -> dict:
-    """Analyze user's own paper to extract claims, results, comparisons."""
+    """Analyze user's own paper to extract claims, results, comparisons.
+
+    When ``session_id`` is given, the analysis is persisted into that session
+    (``paper_data``, ``paper_path``, ``paper_titles``, ``paper_topic_name``,
+    ``paper_size_mb``) — mirroring the GUI's "Analyze My Paper" tab, so the
+    session opened in the desktop app shows the analyzed own-paper. Without
+    ``session_id`` the analysis is returned only (legacy behaviour).
+    """
     if not os.path.isfile(pdf_path):
         return {"error": f"File not found: {pdf_path}"}
 
@@ -642,6 +651,7 @@ def analyze_own_paper(
 
     client = _llm.create_client_from_config(timeout=180.0)
     model = _config.get("llm_model", "")
+    title = os.path.basename(pdf_path)
     try:
         res = client.chat.completions.create(
             model=model,
@@ -651,8 +661,34 @@ def analyze_own_paper(
             ],
             temperature=0.0, timeout=180.0,
         )
-        text = res.choices[0].message.content or ""
-        return {"analysis": text.strip(), "title": os.path.basename(pdf_path)}
+        text = (res.choices[0].message.content or "").strip()
+        result = {"analysis": text, "title": title}
+
+        # Persist into the session so the GUI's "Analyze My Paper" view of this
+        # session shows the analyzed own-paper (GUI parity).
+        if session_id and text:
+            try:
+                from researchforge_api import _sessions
+                size_mb = 0.0
+                try:
+                    size_mb = os.path.getsize(pdf_path) / (1024 ** 2)
+                except OSError:
+                    pass
+                _sessions.update_session(
+                    session_id,
+                    fields_json=json.dumps({
+                        "paper_data": {title: text},
+                        "paper_path": pdf_path,
+                        "paper_titles": [title],
+                        "paper_topic_name": "MyPaper",
+                        "paper_size_mb": size_mb,
+                    }),
+                    append_log=f"Analyzed own paper: {title}",
+                )
+                result["persisted_to_session"] = session_id
+            except Exception as e:
+                result["persist_error"] = str(e)
+        return result
     except Exception as e:
         return {"error": str(e)}
     finally:

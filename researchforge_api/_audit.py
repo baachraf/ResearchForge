@@ -35,19 +35,92 @@ def get_section_text(pdf_path: str, section_name: str) -> str:
     return ""
 
 
+def _audit_cache_path(pdf_path: str) -> str:
+    """Deterministic path where audit_paper persists its full result.
+
+    The audit is a long-running op (N LLM calls); the MCP client often times
+    out before the result returns. Writing here (keyed by the source PDF name)
+    means the result survives the timeout and can be read back via
+    ``get_audit_result`` — mirroring how synthesize_* persist to disk.
+    """
+    base = os.path.splitext(os.path.basename(pdf_path))[0]
+    slug = paths.title_to_slug(base) or "paper"
+    slug = re.sub(r'[\\/*?:"<>|]', '_', slug) or "paper"
+    return os.path.join(paths.audit_root(_config), f"{slug}_audit.json")
+
+
 def audit_paper(
     pdf_path: str,
     mode: str = "section",
     progress_callback=None,
 ) -> dict:
-    """Run a 10-dimension IEEE pre-submission audit on a paper."""
+    """Run a 10-dimension IEEE pre-submission audit on a paper.
+
+    The result is persisted to ``<audit_dir>/<slug>_audit.json`` so it survives
+    an MCP client timeout; retrieve it afterwards with ``get_audit_result``.
+    """
     if not os.path.isfile(pdf_path):
         return {"error": f"File not found: {pdf_path}"}
 
-    if mode == "section":
-        return _audit_section_by_section(pdf_path, progress_callback)
-    else:
-        return _audit_single_call(pdf_path, progress_callback)
+    result = (_audit_section_by_section(pdf_path, progress_callback)
+              if mode == "section"
+              else _audit_single_call(pdf_path, progress_callback))
+
+    # Persist the completed audit so the result survives an MCP client timeout.
+    # Written in the GUI's researchforge.audit/1 shape (nested paper/audit) so
+    # the desktop app's "Load Audit" dialog accepts it directly.
+    if isinstance(result, dict) and "error" not in result:
+        try:
+            cache_path = _audit_cache_path(pdf_path)
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            q_list = result.get("questions") or []
+            if isinstance(q_list, list):
+                q_text = "\n".join(f"{i+1}. {q}" for i, q in enumerate(q_list))
+            else:
+                q_text = str(q_list)
+            bundle = {
+                "schema": "researchforge.audit/1",
+                "app_version": APP_VERSION,
+                "saved_at": datetime.now().isoformat(timespec="seconds"),
+                "paper": {
+                    "name": os.path.basename(pdf_path),
+                    "path": pdf_path,
+                    "source_type": "pdf",
+                    "title": os.path.splitext(os.path.basename(pdf_path))[0],
+                },
+                "audit": {
+                    "context_index": 1 if mode == "full" else 0,
+                    "model": _config.get("llm_model", ""),
+                    "endpoint": _config.get("llm_endpoint", ""),
+                    "results": result.get("report", ""),
+                    "scores": result.get("scores", {}),
+                    "questions": q_text,
+                },
+            }
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(bundle, f, ensure_ascii=False, indent=2)
+            result["cache_path"] = cache_path
+        except Exception:
+            pass
+    return result
+
+
+def get_audit_result(pdf_path: str) -> dict:
+    """Read the persisted audit result for a paper.
+
+    Use after ``rf_audit_paper`` times out at the MCP client: the audit still
+    completes server-side and writes its result to the deterministic cache path
+    (``<audit_dir>/<slug>_audit.json``), so this call returns it without
+    re-running any LLM call. Returns an ``error`` dict if no cached audit exists.
+    """
+    cache_path = _audit_cache_path(pdf_path)
+    if not os.path.isfile(cache_path):
+        return {"error": f"No cached audit for {pdf_path}. Run rf_audit_paper first."}
+    try:
+        with open(cache_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def _audit_single_call(pdf_path: str, progress_callback=None) -> dict:

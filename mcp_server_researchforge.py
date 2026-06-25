@@ -14,6 +14,7 @@ Register in opencode.json:
     }
 """
 import os
+import re
 import sys
 import json
 import traceback
@@ -232,18 +233,54 @@ def rf_set_session_results(session_id: str, results_json: str,
 # SEARCH
 # ═══════════════════════════════════════════════════════════════
 
+def _ensure_query_registered(session_id: str, query_name: str, query_text: str,
+                             sources: list = None, max_results: int = 20,
+                             after_date: str = "") -> None:
+    """Ensure a query named ``query_name`` exists in the session's ``queries``
+    array so the GUI's query panel shows it — not just the results table.
+
+    rf_search previously registered results under query_name without adding the
+    query itself, so the GUI's query table stayed empty even though results and
+    summaries appeared. This upserts a normalized query (via add_query_to_session)
+    when one with that name isn't already present; no-op on re-search to avoid
+    duplicates.
+    """
+    try:
+        existing = rf.get_session_queries(session_id) or []
+    except Exception:
+        existing = []
+    if any((q.get("name") or "") == query_name for q in existing):
+        return
+    try:
+        rf.add_query_to_session(
+            session_id, query_text,
+            sources=list(sources) if sources else None,
+            max_results=max_results, after_date=after_date,
+            name=query_name,
+        )
+    except Exception:
+        # Best-effort: results still register below even if the query row can't be added.
+        pass
+
+
 @mcp.tool()
 def rf_search(query: str, sources: list = None, max_results: int = 20,
               after_date: str = "", session_id: str = "", query_name: str = "") -> dict:
     """Search academic paper databases. Sources: arxiv, semantic_scholar, pubmed, brave, web, openalex, crossref, europe_pmc, core. Default: arxiv, semantic_scholar, web, brave, pubmed.
 
     If `session_id` is given, the hits are also registered into that session
-    (GUI-loadable) and linked to `query_name` (or the session's first query)."""
+    (GUI-loadable) and linked to `query_name` (or a slug derived from the query).
+    The query itself is added to the session's query list so the GUI's query
+    panel shows it alongside the results."""
     out = _safe(rf.search(query, sources=sources, max_results=max_results, after_date=after_date))
     if session_id and isinstance(out, dict) and out.get("results"):
         try:
+            # Resolve the effective query name: explicit > slug of the query text.
+            qname = query_name or re.sub(r"[^0-9A-Za-z\s]", " ", query).split()
+            qname = query_name or "_".join(qname[:6]).lower() or "query"
+            _ensure_query_registered(session_id, qname, query, sources, max_results, after_date)
             rf.set_session_results(session_id, out["results"],
-                                   query_key=query_name, append=True)
+                                   query_key=qname, append=True)
             out["registered_to_session"] = session_id
         except Exception as e:
             out["session_save_error"] = str(e)
@@ -251,9 +288,12 @@ def rf_search(query: str, sources: list = None, max_results: int = 20,
 
 
 @mcp.tool()
-def rf_lookup_by_title(titles: list) -> dict:
-    """Look up specific papers by title. Returns found papers and not_found list."""
-    return _safe(rf.lookup_by_title(titles))
+def rf_lookup_by_title(titles: list, session_id: str = "") -> dict:
+    """Look up specific papers by title. Returns found papers and not_found list.
+    Pass session_id to persist results into the session (GUI Find-Papers parity):
+    found papers register as results, not-found titles are added as quoted-title
+    search queries."""
+    return _safe(rf.lookup_by_title(titles, session_id=session_id))
 
 
 @mcp.tool()
@@ -357,9 +397,12 @@ def rf_analyze_paper(pdf_path: str, prompt_key: str = "per_paper_prompt") -> dic
 
 
 @mcp.tool()
-def rf_analyze_own_paper(pdf_path: str) -> dict:
-    """Analyze your own paper to extract claims, results, comparisons for session creation."""
-    return _safe(rf.analyze_own_paper(pdf_path))
+def rf_analyze_own_paper(pdf_path: str, session_id: str = "") -> dict:
+    """Analyze your own paper to extract claims, results, comparisons for
+    session creation. Pass session_id to persist the analysis into that session
+    (paper_data/paper_path/paper_titles) so the GUI's 'Analyze My Paper' view of
+    the session shows it; otherwise the analysis is returned only."""
+    return _safe(rf.analyze_own_paper(pdf_path, session_id=session_id))
 
 
 @mcp.tool()
@@ -483,6 +526,19 @@ def rf_save_audit_results(report: str, pdf_path: str = "", output_dir: str = "",
         model=model, endpoint=endpoint, paper_title=paper_title,
         source_type=source_type, context_index=context_index, save_name=save_name,
     )
+
+
+@mcp.tool()
+def rf_get_audit_result(pdf_path: str) -> dict:
+    """Retrieve the persisted result of an rf_audit_paper run.
+
+    rf_audit_paper is long-running and often times out at the MCP client; the
+    audit still completes server-side and writes its full result (report,
+    scores, questions) to <audit_dir>/<slug>_audit.json. This tool reads that
+    cached result back without re-running any LLM call. Call it after a timed-
+    out rf_audit_paper to recover the result. Returns an error dict if no cached
+    audit exists for the given pdf_path."""
+    return _safe(rf.get_audit_result(pdf_path))
 
 
 if __name__ == "__main__":

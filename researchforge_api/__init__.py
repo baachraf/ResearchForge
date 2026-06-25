@@ -59,7 +59,7 @@ from researchforge_api._analyze import (
     generate_queries, enhance_research, generate_related_work, generate_introduction,
     list_summaries, get_cached_analysis, run_full_pipeline, create_session_full,
 )
-from researchforge_api._audit import audit_paper, detect_sections, get_section_text, save_audit_results
+from researchforge_api._audit import audit_paper, detect_sections, get_section_text, save_audit_results, get_audit_result
 
 __all__ = [
     "get", "set_config", "get_all", "set_api_key", "get_api_key",
@@ -76,5 +76,5 @@ __all__ = [
     "analyze_paper", "analyze_own_paper", "synthesize_topic", "synthesize_global",
     "generate_queries", "enhance_research", "generate_related_work", "generate_introduction",
     "list_summaries", "get_cached_analysis", "run_full_pipeline", "create_session_full",
-    "audit_paper", "detect_sections", "get_section_text", "save_audit_results",
+    "audit_paper", "detect_sections", "get_section_text", "save_audit_results", "get_audit_result",
 ]
