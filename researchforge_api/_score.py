@@ -218,10 +218,16 @@ def score_session(session_id: str,
     targets = [r for r in results
                if paper_ids is None or r.get("id") in paper_ids]
     if not targets:
-        return {"session_id": session_id, "scored": 0, "total": len(results)}
+        # Nothing matched. Do NOT save — saving the loaded copy here is how a
+        # stale/empty session used to clobber results added by an interleaved
+        # search. Return a diagnostic instead.
+        return {"session_id": session_id, "scored": 0, "total": len(results),
+                "saved": False,
+                "note": ("no results matched paper_ids; session left unmodified"
+                         if paper_ids is not None else "session has no results")}
 
     # score_papers mutates each dict in place; targets are references into
-    # session["results"], so scores propagate before we save.
+    # session["results"].
     score_papers(
         targets,
         research_context=session.get("context", ""),
@@ -232,8 +238,22 @@ def score_session(session_id: str,
         progress_callback=progress_callback,
     )
 
-    _sessions.save_session(session_id, session)
+    # Persist by id onto a FRESH reload, so any results added between our load
+    # and now (e.g. by a concurrent search) are preserved rather than clobbered.
+    score_map = {r.get("id"): (r.get("relevance_score"), r.get("score_reason", ""))
+                 for r in targets
+                 if r.get("id") is not None and r.get("relevance_score", -1) >= 0}
+    fresh = _sessions.ensure_full_schema(_sessions.load_session(session_id) or session)
+    applied = 0
+    for r in fresh.get("results", []):
+        sc = score_map.get(r.get("id"))
+        if sc is not None:
+            r["relevance_score"], r["score_reason"] = sc[0], sc[1]
+            applied += 1
+    _sessions.save_session(session_id, fresh)
+
     scored = [{"id": r.get("id"), "title": r.get("title", ""),
                "relevance_score": r.get("relevance_score")} for r in targets]
-    return {"session_id": session_id, "scored": len(targets),
-            "total": len(results), "results": scored}
+    return {"session_id": session_id, "scored": applied,
+            "matched": len(targets), "total": len(fresh.get("results", [])),
+            "saved": True, "results": scored}
