@@ -274,5 +274,45 @@ class TestIssue5ScoreReason(_IsolatedCase):
         self.assertEqual(res[0]["reason"], "same broad domain, different specific problem")
 
 
+class TestIssue4MCPWrapper(_IsolatedCase):
+    """Integration test for the actual MCP tool rf_search (not just the API
+    helper): the session must keep FULL records while the returned payload is
+    compact — i.e. compaction happens AFTER session registration."""
+
+    def _call_rf_search(self, **kwargs):
+        import mcp_server_researchforge as m
+        # rf_search is wrapped by FastMCP; call the underlying function.
+        fn = getattr(m.rf_search, "fn", m.rf_search)
+        # Mock the network search to return full records (with abstracts).
+        full = [{"id": f"r{i}", "title": f"Paper {i}", "url": f"http://x/{i}",
+                 "year": 2021, "query_source": "arxiv",
+                 "abstract": "A" * 2000} for i in range(3)]
+        with mock.patch.object(m.rf, "search",
+                               return_value={"results": full, "sources": {"arxiv": 3}, "total": 3}):
+            return fn(**kwargs)
+
+    def test_session_keeps_full_records_response_is_compact(self):
+        from researchforge_api import _sessions
+        sid = self._make_session("MCPSearchSess", [])
+
+        out = self._call_rf_search(query="rppg", session_id=sid, query_name="q1", compact=True)
+
+        # Returned payload is compact (no abstracts) ...
+        self.assertTrue(out.get("compact"))
+        self.assertNotIn("abstract", out["results"][0])
+        self.assertEqual(set(out["results"][0]) & {"id", "title", "url", "year", "source"},
+                         {"id", "title", "url", "year", "source"})
+
+        # ... but the SESSION stored the full records (abstracts intact).
+        reloaded = _sessions.load_session(sid)
+        self.assertEqual(len(reloaded["results"]), 3)
+        self.assertTrue(all(r.get("abstract") for r in reloaded["results"]),
+                        "session must keep full records with abstracts")
+
+    def test_compact_false_returns_full_payload(self):
+        out = self._call_rf_search(query="rppg", session_id="", compact=False)
+        self.assertIn("abstract", out["results"][0])
+
+
 if __name__ == "__main__":
     unittest.main()
