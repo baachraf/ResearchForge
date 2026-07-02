@@ -472,6 +472,7 @@ class SearchDownloadTab(QWidget):
         self.btn_session_edit.setObjectName("btn_session_edit")
         self.btn_session_edit.clicked.connect(self._session_edit)
         self.btn_sel_all = QPushButton("Deselect All")
+        self.btn_sel_all.setObjectName("btn_secondary")
         self.btn_sel_all.clicked.connect(self._select_all_queries)
         btn_remove_query = QPushButton("✕ Remove")
         btn_remove_query.setObjectName("btn_delete")  # filled red
@@ -564,14 +565,17 @@ class SearchDownloadTab(QWidget):
         desel_all = self._source_menu.addAction("Deselect All")
         desel_all.triggered.connect(lambda: self._set_all_sources(False))
         self.btn_source_filter = QPushButton("Sources  ▼")
+        self.btn_source_filter.setObjectName("btn_secondary")
         self.btn_source_filter.setMenu(self._source_menu)
         self.btn_source_filter.setToolTip("Filter results by source")
         hb_result_bar.addWidget(self.btn_source_filter)
 
         self.btn_toggle_all = QPushButton("Select All")
+        self.btn_toggle_all.setObjectName("btn_secondary")
         self.btn_toggle_all.clicked.connect(self._toggle_all_checked)
         hb_result_bar.addWidget(self.btn_toggle_all)
         self.btn_invert = QPushButton("Invert")
+        self.btn_invert.setObjectName("btn_secondary")
         self.btn_invert.clicked.connect(self._invert_selection)
         hb_result_bar.addWidget(self.btn_invert)
 
@@ -669,6 +673,7 @@ class SearchDownloadTab(QWidget):
         dl_header.addWidget(self.lbl_dl_tab_count)
         dl_header.addStretch()
         self.btn_refresh_dl = QPushButton("\u21bb Refresh")
+        self.btn_refresh_dl.setObjectName("btn_secondary")
         self.btn_refresh_dl.setFixedHeight(24)
         self.btn_refresh_dl.setToolTip("Rescan the session download folder")
         self.btn_refresh_dl.clicked.connect(self._refresh_downloaded_tab)

@@ -437,6 +437,46 @@ QPushButton#btn_enhance:hover {
     background: ${action_amber_hover};
 }
 
+/* ═══  BUTTONS — SECONDARY / UTILITY (soft slate)  ═════════════ */
+
+QPushButton#btn_secondary {
+    background: ${bg_alt};
+    color: ${text_secondary};
+    border: 1px solid ${border_default};
+    border-radius: 5px;
+    padding: 5px 12px;
+    font-weight: 500;
+    font-size: 12px;
+}
+QPushButton#btn_secondary:hover {
+    background: ${bg_secondary};
+    border-color: ${border_input};
+    color: ${text_primary};
+}
+QPushButton#btn_secondary:pressed {
+    background: ${bg_secondary};
+}
+QPushButton#btn_secondary:disabled {
+    background: ${bg_disabled};
+    color: ${text_disabled};
+    border-color: ${border_disabled};
+}
+
+/* ═══  BUTTONS — PRESETS (indigo accent)  ══════════════════════ */
+
+QPushButton#btn_presets {
+    background: ${action_indigo};
+    color: ${text_inverse};
+    border: none;
+    border-radius: 5px;
+    padding: 5px 14px;
+    font-weight: 600;
+    font-size: 12px;
+}
+QPushButton#btn_presets:hover {
+    background: ${action_indigo_hover};
+}
+
 QPushButton#btn_refresh_tree {
     background: ${action_lightblue};
     color: ${text_inverse};

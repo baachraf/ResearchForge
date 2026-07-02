@@ -69,10 +69,12 @@ class PromptEditorTab(QWidget):
         hb.setSpacing(4)
 
         self.btn_export_all = QPushButton("Export ZIP")
+        self.btn_export_all.setObjectName("btn_secondary")
         self.btn_export_all.clicked.connect(self._export_zip)
         hb.addWidget(self.btn_export_all)
 
         self.btn_import_all = QPushButton("Import ZIP")
+        self.btn_import_all.setObjectName("btn_secondary")
         self.btn_import_all.clicked.connect(self._import_zip)
         hb.addWidget(self.btn_import_all)
 
@@ -85,12 +87,8 @@ class PromptEditorTab(QWidget):
         hb.addWidget(self.btn_save)
 
         self.btn_presets = QPushButton("Presets ▾")
+        self.btn_presets.setObjectName("btn_presets")
         self.btn_presets.setToolTip("Load or delete a saved preset for this prompt")
-        self.btn_presets.setStyleSheet(
-            "QPushButton{background:#1565c0; color:white; border:none; border-radius:5px;"
-            " padding:5px 14px; font-weight:600; font-size:12px;}"
-            "QPushButton:hover{background:#1976d2;}"
-        )
         self.btn_presets.clicked.connect(self._open_presets_menu)
         hb.addWidget(self.btn_presets)
 
@@ -175,8 +173,8 @@ class PromptEditorTab(QWidget):
         b_default = box.addButton("Set as my default", QMessageBox.AcceptRole)
         b_preset = box.addButton("Save as preset…", QMessageBox.ActionRole)
         box.addButton("Cancel", QMessageBox.RejectRole)
-        b_default.setStyleSheet("background:#2e7d32; color:white; padding:6px 14px; border-radius:4px; font-weight:600;")
-        b_preset.setStyleSheet("background:#1565c0; color:white; padding:6px 14px; border-radius:4px; font-weight:600;")
+        b_default.setObjectName("btn_save")      # green (success) via theme
+        b_preset.setObjectName("btn_presets")    # indigo via theme
         self._widen_dialog(box, 560)
         box.exec()
         clicked = box.clickedButton()
@@ -258,6 +256,8 @@ class PromptEditorTab(QWidget):
         b_this = box.addButton(f"This prompt ({name})", QMessageBox.AcceptRole)
         b_all = box.addButton("All prompts", QMessageBox.DestructiveRole)
         box.addButton("Cancel", QMessageBox.RejectRole)
+        b_this.setObjectName("btn_secondary")    # mild, single-prompt restore
+        b_all.setObjectName("btn_delete")        # red (destructive) via theme
         self._widen_dialog(box, 520)
         box.exec()
         clicked = box.clickedButton()
