@@ -94,6 +94,11 @@ class PromptEditorTab(QWidget):
 
         self.btn_presets = QPushButton("Presets ▾")
         self.btn_presets.setToolTip("Load or delete a saved preset for this prompt")
+        self.btn_presets.setStyleSheet(
+            "QPushButton{background:#1565c0; color:white; border:none; border-radius:5px;"
+            " padding:5px 14px; font-weight:600; font-size:12px;}"
+            "QPushButton:hover{background:#1976d2;}"
+        )
         self.btn_presets.clicked.connect(self._open_presets_menu)
         hb.addWidget(self.btn_presets)
 
@@ -137,9 +142,11 @@ class PromptEditorTab(QWidget):
     def _on_edited(self, key: str):
         self._refresh_tab_title(key)
 
-    def _mark_saved(self, key: str, content: str):
-        """Record that ``content`` is now the on-disk state and clear the dirty flag."""
-        self._saved_text[key] = content
+    def _mark_saved(self, key: str):
+        """Snapshot the editor's CURRENT text as the saved baseline and clear the
+        dirty flag. Snapshotting straight from the editor guarantees _is_dirty is
+        False immediately after a save (no content/editor mismatch)."""
+        self._saved_text[key] = self._editors[key].toPlainText()
         self._refresh_tab_title(key)
 
     def has_unsaved_changes(self) -> bool:
@@ -152,9 +159,8 @@ class PromptEditorTab(QWidget):
         """Persist every edited prompt as the active default (used by the close guard)."""
         for key in list(self._editors):
             if self._is_dirty(key):
-                content = self._editors[key].toPlainText()
-                self.cfg.save_prompt(key, content)
-                self._mark_saved(key, content)
+                self.cfg.save_prompt(key, self._editors[key].toPlainText())
+                self._mark_saved(key)
         self.log.emit("Unsaved prompt edits saved as default.")
 
     # ── save (default vs named preset) ───────────────────────────────────────
@@ -177,17 +183,27 @@ class PromptEditorTab(QWidget):
         b_default = box.addButton("Set as my default", QMessageBox.AcceptRole)
         b_preset = box.addButton("Save as preset…", QMessageBox.ActionRole)
         box.addButton("Cancel", QMessageBox.RejectRole)
+        b_default.setStyleSheet("background:#2e7d32; color:white; padding:6px 14px; border-radius:4px; font-weight:600;")
+        b_preset.setStyleSheet("background:#1565c0; color:white; padding:6px 14px; border-radius:4px; font-weight:600;")
+        self._widen_dialog(box, 560)
         box.exec()
         clicked = box.clickedButton()
         if clicked == b_default:
             self.cfg.save_prompt(key, content)
-            self._mark_saved(key, content)
+            self._mark_saved(key)
             self.log.emit(f"'{name}' set as your default.")
         elif clicked == b_preset:
-            pname, ok = QInputDialog.getText(self, "Save as preset", "Preset name:")
-            if ok and pname.strip():
-                self.cfg.save_prompt_preset(key, pname.strip(), content)
-                self.log.emit(f"'{name}' saved as preset '{pname.strip()}'.")
+            dlg = QInputDialog(self)
+            dlg.setWindowTitle("Save as preset")
+            dlg.setLabelText(f"Preset name for “{name}”:")
+            dlg.setTextValue("")
+            dlg.resize(440, dlg.sizeHint().height())
+            if dlg.exec() and dlg.textValue().strip():
+                pname = dlg.textValue().strip()
+                self.cfg.save_prompt_preset(key, pname, content)
+                # the edit is now persisted (as a preset) → clear the dirty star
+                self._mark_saved(key)
+                self.log.emit(f"'{name}' saved as preset '{pname}'.")
 
     # ── presets (load / delete) ──────────────────────────────────────────────
 
@@ -195,6 +211,10 @@ class PromptEditorTab(QWidget):
         key = self._current_key()
         presets = self.cfg.list_prompt_presets(key)
         menu = QMenu(self)
+        # Header makes it explicit the list is scoped to the ACTIVE prompt tab.
+        header = menu.addAction(f"Presets for: {self._name_for(key)}")
+        header.setEnabled(False)
+        menu.addSeparator()
         if not presets:
             act = menu.addAction("(no presets saved for this prompt)")
             act.setEnabled(False)
@@ -217,7 +237,7 @@ class PromptEditorTab(QWidget):
         # Loading a preset applies it: it becomes the active default the app uses.
         self._current_editor().setText(content)
         self.cfg.save_prompt(key, content)
-        self._mark_saved(key, content)
+        self._mark_saved(key)
         self.log.emit(f"Loaded preset '{name}' for '{self._name_for(key)}' (now active).")
 
     def _delete_preset(self, name: str):
@@ -246,18 +266,31 @@ class PromptEditorTab(QWidget):
         b_this = box.addButton(f"This prompt ({name})", QMessageBox.AcceptRole)
         b_all = box.addButton("All prompts", QMessageBox.DestructiveRole)
         box.addButton("Cancel", QMessageBox.RejectRole)
+        self._widen_dialog(box, 520)
         box.exec()
         clicked = box.clickedButton()
         if clicked == b_this:
             content = self.cfg.reset_prompt_to_default(key)
             editor = self._editors[key]
             editor.setText(content)
-            self._mark_saved(key, content)
+            self._mark_saved(key)
             self.log.emit(f"'{name}' restored to default.")
         elif clicked == b_all:
             self.cfg.reset_all_prompts_to_default()
             self._load_prompts()
             self.log.emit("All prompts restored to original defaults.")
+
+    @staticmethod
+    def _widen_dialog(box, min_width: int):
+        """Force a QMessageBox wider so button labels aren't truncated. QMessageBox
+        ignores setMinimumWidth, so we stretch its grid layout with a spacer."""
+        try:
+            from PySide6.QtWidgets import QSpacerItem, QSizePolicy
+            layout = box.layout()
+            spacer = QSpacerItem(min_width, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+            layout.addItem(spacer, layout.rowCount(), 0, 1, layout.columnCount())
+        except Exception:
+            pass
 
     def _current_key(self) -> str:
         idx = self.prompt_tabs.currentIndex()
@@ -279,7 +312,7 @@ class PromptEditorTab(QWidget):
                 key = self._current_key()
                 self._current_editor().setText(content)
                 self.cfg.save_prompt(key, content)
-                self._mark_saved(key, content)
+                self._mark_saved(key)
                 self.log.emit(f"Loaded and saved: {path}")
             except Exception as e:
                 QMessageBox.warning(self, "Error", str(e))
@@ -293,7 +326,7 @@ class PromptEditorTab(QWidget):
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(self._current_editor().toPlainText())
                 self.cfg.set(key, path)
-                self._mark_saved(key, self._current_editor().toPlainText())
+                self._mark_saved(key)
                 self.log.emit(f"Saved: {path}")
             except Exception as e:
                 QMessageBox.warning(self, "Error", str(e))
@@ -321,7 +354,7 @@ class PromptEditorTab(QWidget):
                         content = zf.read(fname).decode("utf-8")
                         self._editors[key].setText(content)
                         self.cfg.save_prompt(key, content)
-                        self._mark_saved(key, content)
+                        self._mark_saved(key)
             self.log.emit(f"Imported and saved: {path}")
         except Exception as e:
             QMessageBox.warning(self, "Error", str(e))

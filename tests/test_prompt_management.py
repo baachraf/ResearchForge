@@ -139,6 +139,16 @@ class TestPromptTabUI(_TempAppData):
         self.assertFalse(tab.has_unsaved_changes())
         self.assertEqual(self.cfg.load_prompt(KEY), "now my default")
 
+    def test_star_clears_after_save(self):
+        """Regression: the dirty '*' must disappear once the prompt is saved."""
+        tab = self._tab()
+        idx = tab._key_index[KEY]
+        tab._editors[KEY].setPlainText("changed text")
+        self.assertIn("*", tab.prompt_tabs.tabText(idx))
+        tab._mark_saved(KEY)   # what every save path calls
+        self.assertNotIn("*", tab.prompt_tabs.tabText(idx))
+        self.assertFalse(tab.has_unsaved_changes())
+
     def test_load_preset_activates_it(self):
         self.cfg.save_prompt_preset(KEY, "p1", "PRESET ACTIVE NOW")
         tab = self._tab()
