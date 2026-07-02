@@ -249,6 +249,26 @@ class MainWindow(QMainWindow):
         self.btn_theme_toggle.setText("")
 
     def closeEvent(self, event):
+        # Guard unsaved prompt edits — they are NOT used until saved and would be
+        # lost silently on close.
+        try:
+            if self.prompt_tab.has_unsaved_changes():
+                names = ", ".join(self.prompt_tab.unsaved_names())
+                reply = QMessageBox.question(
+                    self, "Unsaved prompt edits",
+                    f"You have unsaved changes in the Prompt editor ({names}).\n\n"
+                    "These edits are not used until saved, and will be lost on close.\n\n"
+                    "Save them as your default now?",
+                    QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+                    QMessageBox.Save,
+                )
+                if reply == QMessageBox.Cancel:
+                    event.ignore()
+                    return
+                if reply == QMessageBox.Save:
+                    self.prompt_tab.save_all_dirty_as_default()
+        except Exception:
+            pass
         try:
             self.audit_tab._save_state()
         except Exception:

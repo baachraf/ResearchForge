@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 from typing import Any, Dict
 
@@ -68,6 +69,10 @@ DEFAULT_SETTINGS = {
     "search_mode": "academic",
     "first_run": True,
 }
+
+# Every prompt key (used by reset-all). Derived from DEFAULT_SETTINGS so it stays
+# in sync automatically as prompts are added.
+ALL_PROMPT_KEYS = [k for k in DEFAULT_SETTINGS if k.endswith("_prompt")]
 
 
 class ConfigManager:
@@ -225,9 +230,83 @@ class ConfigManager:
         return ""
 
     def save_prompt(self, key: str, content: str):
-        path = self.get_prompt_path(key)
-        if not path:
-            path = DEFAULT_SETTINGS.get(key, os.path.join(PROMPTS_DIR, f"{key.split('_prompt')[0]}.md"))
+        """Persist ``content`` as the user's ACTIVE prompt for ``key`` — this is
+        the file that loads every session and that the pipeline reads. i.e.
+        'set as my default'."""
+        path = self.get_prompt_path(key) or self._active_prompt_path(key)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
+
+    # ── default / bundled restore ───────────────────────────────────────────
+
+    def _prompt_filename(self, key: str) -> str:
+        """Canonical .md filename for a prompt key (from DEFAULT_SETTINGS)."""
+        default = DEFAULT_SETTINGS.get(key, "")
+        if default:
+            return os.path.basename(default)
+        return f"{key.split('_prompt')[0]}.md"
+
+    def _active_prompt_path(self, key: str) -> str:
+        """Where the user's active copy of this prompt lives."""
+        return os.path.join(PROMPTS_DIR, self._prompt_filename(key))
+
+    def bundled_prompt_path(self, key: str) -> str:
+        """The original shipped prompt — never written to, always available."""
+        return os.path.join(BUNDLED_PROMPTS, self._prompt_filename(key))
+
+    def reset_prompt_to_default(self, key: str) -> str:
+        """Restore the ORIGINAL bundled prompt for ``key`` as the active prompt.
+        Returns the restored content (empty string if no bundled file)."""
+        src = self.bundled_prompt_path(key)
+        dst = self.get_prompt_path(key) or self._active_prompt_path(key)
+        if os.path.isfile(src):
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+            with open(dst, "r", encoding="utf-8") as f:
+                return f.read()
+        return ""
+
+    def reset_all_prompts_to_default(self) -> None:
+        """Restore every prompt to its original bundled version."""
+        for key in ALL_PROMPT_KEYS:
+            self.reset_prompt_to_default(key)
+
+    # ── named presets (saved variants, applied only on manual load) ──────────
+
+    def _preset_dir(self, key: str) -> str:
+        return os.path.join(PROMPTS_DIR, "presets", key)
+
+    @staticmethod
+    def _safe_preset_name(name: str) -> str:
+        return re.sub(r'[\\/*?:"<>|]', "_", (name or "").strip()) or "preset"
+
+    def save_prompt_preset(self, key: str, name: str, content: str) -> str:
+        """Save ``content`` as a NAMED preset for ``key``. Presets are NOT loaded
+        automatically — they only apply when loaded via ``load_prompt_preset``."""
+        d = self._preset_dir(key)
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, self._safe_preset_name(name) + ".md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return path
+
+    def list_prompt_presets(self, key: str) -> list:
+        d = self._preset_dir(key)
+        if not os.path.isdir(d):
+            return []
+        return sorted(os.path.splitext(f)[0] for f in os.listdir(d) if f.endswith(".md"))
+
+    def load_prompt_preset(self, key: str, name: str) -> str:
+        path = os.path.join(self._preset_dir(key), self._safe_preset_name(name) + ".md")
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        return ""
+
+    def delete_prompt_preset(self, key: str, name: str) -> bool:
+        path = os.path.join(self._preset_dir(key), self._safe_preset_name(name) + ".md")
+        if os.path.isfile(path):
+            os.remove(path)
+            return True
+        return False
