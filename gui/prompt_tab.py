@@ -68,14 +68,6 @@ class PromptEditorTab(QWidget):
         hb = QHBoxLayout()
         hb.setSpacing(4)
 
-        self.btn_load = QPushButton("Load File...")
-        self.btn_load.clicked.connect(self._load_prompt_file)
-        hb.addWidget(self.btn_load)
-
-        self.btn_save_as = QPushButton("Save As...")
-        self.btn_save_as.clicked.connect(self._save_prompt_file)
-        hb.addWidget(self.btn_save_as)
-
         self.btn_export_all = QPushButton("Export ZIP")
         self.btn_export_all.clicked.connect(self._export_zip)
         hb.addWidget(self.btn_export_all)
@@ -298,38 +290,6 @@ class PromptEditorTab(QWidget):
 
     def _current_editor(self) -> QTextEdit:
         return self._editors[self._current_key()]
-
-    def _current_fname(self) -> str:
-        idx = self.prompt_tabs.currentIndex()
-        return PROMPT_KEYS[idx][2]
-
-    def _load_prompt_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Load Prompt", "", "Markdown Files (*.md);;All (*)")
-        if path:
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                key = self._current_key()
-                self._current_editor().setText(content)
-                self.cfg.save_prompt(key, content)
-                self._mark_saved(key)
-                self.log.emit(f"Loaded and saved: {path}")
-            except Exception as e:
-                QMessageBox.warning(self, "Error", str(e))
-
-    def _save_prompt_file(self):
-        key = self._current_key()
-        name = PROMPT_KEYS[self.prompt_tabs.currentIndex()][1].lower().replace(" ", "_")
-        path, _ = QFileDialog.getSaveFileName(self, "Save Prompt", f"{name}.md", "Markdown (*.md)")
-        if path:
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(self._current_editor().toPlainText())
-                self.cfg.set(key, path)
-                self._mark_saved(key)
-                self.log.emit(f"Saved: {path}")
-            except Exception as e:
-                QMessageBox.warning(self, "Error", str(e))
 
     def _export_zip(self):
         path, _ = QFileDialog.getSaveFileName(self, "Export All", "prompts.zip", "ZIP (*.zip)")
