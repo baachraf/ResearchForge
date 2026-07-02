@@ -19,7 +19,7 @@ Desktop application that searches academic paper databases, downloads PDFs, and 
 - **Automated PDF download**: batch download with duplicate detection and file validation
 - **Summarization pipeline**: per-paper analysis, topic synthesis, global synthesis, related work section, introduction draft
 - **Audit My Paper**: 10-dimension IEEE pre-submission self-audit on any PDF or LaTeX source — score panel, questions for the author, section-by-section mode; save/load standalone audit reports, independent of any session
-- **13 editable prompts**: customize every stage of the LLM pipeline
+- **12 editable prompts**: customize every stage of the LLM pipeline. Save your edits as your **default** or as named **presets** you load on demand; **Reset to Default** (one prompt or all) restores the bundled originals, which are never overwritten. Unsaved edits are flagged and guarded on exit.
 - **Analysis lenses**: filter by similarity, novelty, methodology, research gaps
 - **Session management**: save, load, and resume research sessions
 - **Local and remote LLMs**: LM Studio, Ollama (local) / DeepSeek, Gemini (remote API)
@@ -376,7 +376,7 @@ The GUI and MCP server are fully interoperable:
 |------|---------|
 | `main_window.py` | QMainWindow, 5-tab layout, close-event guard, log redirector |
 | `settings_tab.py` | LLM provider/model, API keys, directories, query defaults |
-| `prompt_tab.py` | 11 editable system prompts in a QTabWidget |
+| `prompt_tab.py` | 12 editable system prompts in a QTabWidget; per-prompt default/preset save, reset-to-default (this/all), unsaved-edit tracking |
 | `search_tab.py` | Query table + results table, multi-source search, relevance scoring, downloads, local PDF injection |
 | `session_creator.py` | Dialog: research description, query generation, paper analysis |
 | `query_assistant.py` | Dialog: generate queries from natural-language description |
@@ -416,7 +416,7 @@ All API keys (and the shared contact email) are entered via **Set Keys** on the 
 | Item | Purpose |
 |------|---------|
 | `settings.json` | Default settings (clean, no API keys) |
-| `prompts/` | 11 default prompt templates (.md). User edits saved to `~/.ResearchForge/prompts/` |
+| `prompts/` | Bundled default prompt templates (.md), never overwritten. User edits saved to `~/.ResearchForge/prompts/`; named presets under `~/.ResearchForge/prompts/presets/` |
 | `sessions/` | Empty. Bundled for build, user sessions at `~/.ResearchForge/sessions/` |
 
 ### `design/`: App icons and assets
