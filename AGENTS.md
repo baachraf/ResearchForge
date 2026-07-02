@@ -71,8 +71,11 @@ single-threaded; parallel calls will corrupt the JSON-RPC stream and crash it.
 
 2. rf_search(query="...", sources=["arxiv","semantic_scholar"],
              session_id="My Session", query_name="my_query_1")
-   → registers results into the session under query_name
+   → registers results into the session under query_name (FULL records, incl. abstracts)
    → ALSO adds the query to the session's queries array (GUI parity)
+   → the RETURNED payload is compact by default (id/title/url/year/source) to stay
+     under the token cap; the session still holds the full records. Score/download
+     in-session (steps 3–4) — do NOT feed this compact list into rf_score_papers.
 
 3. (optional) rf_score_session(session_id="My Session", scoring_depth=2)
    → LLM scores each paper's relevance 0–100
@@ -181,7 +184,7 @@ retrieve tool → get the full result.
 ### Search (3)
 | Tool | Key params | Purpose |
 |---|---|---|
-| `rf_search` | `query, sources?, max_results?, session_id?, query_name?` | Search databases; `session_id`+`query_name` registers into session + adds query to GUI panel |
+| `rf_search` | `query, sources?, max_results?, session_id?, query_name?, compact?, fields?` | Search databases; `session_id`+`query_name` registers FULL records into session + adds query to GUI panel. Returned payload is compact (id/title/url/year/source) by default — pass `compact=false` for full records (e.g. to feed `rf_score_papers`), or `fields=[…]` to pick columns |
 | `rf_lookup_by_title` | `titles, session_id?` | Find papers by exact/fuzzy title; `session_id` persists found as results + not-found as queries |
 | `rf_filter_papers` | `papers, title_filter?, score_threshold?` | Filter a result list |
 
@@ -199,8 +202,8 @@ retrieve tool → get the full result.
 ### Score (2)
 | Tool | Key params | Purpose |
 |---|---|---|
-| `rf_score_papers` | `papers_json, research_context?, scoring_depth?` | Score raw list (1=fast, 2=compare, 3=analyze) |
-| `rf_score_session` | `session_id, paper_ids?, scoring_depth?` | Score session's own results + persist scores |
+| `rf_score_papers` | `papers_json, research_context?, scoring_depth?` | Score a raw list (1=fast, 2=compare, 3=analyze). Needs abstracts — pass full records (from `rf_search` with `compact=false`), not the compact search payload. Returns `score` **and** a one-line `reason`. |
+| `rf_score_session` | `session_id, paper_ids?, scoring_depth?` | Score session's own (full) results + persist `relevance_score`/`score_reason`. Preferred over `rf_score_papers` — the session always holds full records. |
 
 ### Analyze / Synthesize / Report (10)
 | Tool | Key params | Purpose |

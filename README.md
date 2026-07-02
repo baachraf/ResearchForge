@@ -348,7 +348,7 @@ The GUI and MCP server are fully interoperable:
 | **LLM** | `rf_test_connection`, `rf_fetch_models`, `rf_discover_endpoints` |
 | **Prompts** | `rf_list_prompts`, `rf_get_prompt`, `rf_set_prompt`, `rf_reset_prompt`, `rf_reset_all_prompts` |
 | **Sessions** | `rf_list_sessions`, `rf_load_session`, `rf_save_session`, `rf_delete_session`, `rf_get_session_queries`, `rf_add_query_to_session`, `rf_remove_query_from_session`, `rf_set_session_results`, `rf_update_session` |
-| **Search** | `rf_search` (optional `session_id` registers hits into a session), `rf_lookup_by_title`, `rf_filter_papers` |
+| **Search** | `rf_search` (optional `session_id` registers full hits into a session; returned payload is `compact` by default — `compact=false` for full records), `rf_lookup_by_title`, `rf_filter_papers` |
 | **Download** | `rf_download_paper`, `rf_download_papers`, `rf_download_session`, `rf_refresh_session_downloads`, `rf_is_downloaded`, `rf_list_downloads`, `rf_list_download_tree` |
 | **Score** | `rf_score_papers`, `rf_score_session` |
 | **Analyze** | `rf_analyze_paper`, `rf_analyze_own_paper`, `rf_synthesize_topic`, `rf_synthesize_global`, `rf_generate_related_work`, `rf_generate_introduction`, `rf_generate_queries`, `rf_enhance_research`, `rf_run_full_pipeline`, `rf_create_session` |
