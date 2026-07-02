@@ -64,6 +64,54 @@ def _extract_abstract_and_intro(pdf_path: str) -> tuple[str, str]:
     return "", "none"
 
 
+# The relevance prompt ends with "Return ONLY an integer", so a plain call yields
+# no reasoning and the GUI's Match tooltip stays blank. The GUI's own worker
+# (gui/workers.py) sidesteps this by appending a reason request and parsing a
+# dash-separated reason. We mirror that here so MCP-driven scoring populates
+# score_reason too (open-issue #5).
+_REASON_INSTRUCTION = (
+    "\n\nOutput: <score 0-100> then a dash then a one-sentence reason for the "
+    "score. Example: '75 - same compression-artifact domain but targets images "
+    "not biosignals'"
+)
+
+
+def _parse_score_reason(text: str) -> tuple[int, str]:
+    """Parse '<score> - <reason>' from an LLM reply. Mirrors the dash-parse in
+    gui/workers.py so API and GUI extract the same score/reason."""
+    text = (text or "").strip()
+    nums = re.findall(r'\b(\d{1,3})\b', text)
+    score = int(nums[-1]) if nums else -1
+    if score > 100:
+        score = -1
+    reason = ""
+    for dash in ("—", "--", "- "):
+        if dash in text:
+            after = text.split(dash, 1)[1].strip()
+            if after:
+                reason = after[:120]
+            break
+    if not reason and nums:
+        remainder = text[text.rfind(str(nums[-1])) + len(str(nums[-1])):].strip().lstrip(".-—: ")[:120]
+        if remainder:
+            reason = remainder
+    return score, reason
+
+
+def _band_reason(score: int) -> str:
+    """Fallback reason describing the relevance band (matches the prompt's
+    0-100 bands), used when the model returned a bare integer with no prose."""
+    if score >= 90:
+        return "same problem, same domain, similar methods"
+    if score >= 70:
+        return "same problem, same domain, different approach"
+    if score >= 50:
+        return "related sub-problem in same domain"
+    if score >= 25:
+        return "same broad domain, different specific problem"
+    return "different problem"
+
+
 def _keyword_score(research_context: str, focus_keywords: str, avoid_topics: str,
                    paper_text: str, title: str) -> int:
     def _terms(t):
@@ -163,6 +211,7 @@ def score_papers(
                             ("{focus_keywords}", focus_keywords), ("{avoid_topics}", avoid_topics),
                             ("{title}", title), ("{content}", content[:800]), ("{abstract}", content[:800])]:
                 filled = filled.replace(ph, val or "")
+            filled += _REASON_INSTRUCTION
 
             try:
                 res = client.chat.completions.create(
@@ -171,14 +220,7 @@ def score_papers(
                     temperature=0.1, max_tokens=1024,
                 )
                 text = res.choices[0].message.content or ""
-                text = text.strip()
-                nums = re.findall(r'\b(\d{1,3})\b', text)
-                score = int(nums[-1]) if nums else -1
-                if score > 100:
-                    score = -1
-                match = re.search(r'\b(\d{1,3})\b(.*)', text)
-                if match and len(match.group(2).strip()) > 2:
-                    reason = match.group(2).strip()[:120]
+                score, reason = _parse_score_reason(text)
             except Exception as e:
                 score = -1
                 reason = f"LLM error: {str(e)[:80]}"
@@ -186,6 +228,8 @@ def score_papers(
             if score == -1:
                 score = _keyword_score(research_context, focus_keywords, avoid_topics, content, title)
                 reason = reason or "keyword fallback"
+            elif not reason:
+                reason = _band_reason(score)
 
         paper["relevance_score"] = score
         paper["score_reason"] = reason

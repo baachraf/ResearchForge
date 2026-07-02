@@ -265,13 +265,20 @@ def _ensure_query_registered(session_id: str, query_name: str, query_text: str,
 
 @mcp.tool()
 def rf_search(query: str, sources: list = None, max_results: int = 20,
-              after_date: str = "", session_id: str = "", query_name: str = "") -> dict:
+              after_date: str = "", session_id: str = "", query_name: str = "",
+              compact: bool = True, fields: list = None) -> dict:
     """Search academic paper databases. Sources: arxiv, semantic_scholar, pubmed, brave, web, openalex, crossref, europe_pmc, core. Default: arxiv, semantic_scholar, web, brave, pubmed.
 
     If `session_id` is given, the hits are also registered into that session
-    (GUI-loadable) and linked to `query_name` (or a slug derived from the query).
-    The query itself is added to the session's query list so the GUI's query
-    panel shows it alongside the results."""
+    (GUI-loadable, with FULL fields incl. abstracts) and linked to `query_name`
+    (or a slug derived from the query). The query itself is added to the
+    session's query list so the GUI's query panel shows it alongside the results.
+
+    `compact` (default True) trims the RETURNED payload to id/title/url/year/source
+    to stay under the MCP token cap — the session still stores full records. Pass
+    `compact=False` for the full payload (e.g. to feed abstracts straight into
+    rf_score_papers), or `fields=[...]` to choose the returned columns."""
+    # Always fetch full results so the session gets complete records.
     out = _safe(rf.search(query, sources=sources, max_results=max_results, after_date=after_date))
     if session_id and isinstance(out, dict) and out.get("results"):
         try:
@@ -284,6 +291,10 @@ def rf_search(query: str, sources: list = None, max_results: int = 20,
             out["registered_to_session"] = session_id
         except Exception as e:
             out["session_save_error"] = str(e)
+    # Trim the response only AFTER the session has stored the full records.
+    if compact and isinstance(out, dict) and out.get("results"):
+        out["results"] = rf.compact_results(out["results"], fields)
+        out["compact"] = True
     return out
 
 

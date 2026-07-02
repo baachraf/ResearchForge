@@ -17,6 +17,29 @@ from gui.discovery import discover as _discover_endpoints
 from difflib import SequenceMatcher
 
 
+# Fields kept when a caller asks for a compact result set. Abstracts and author
+# lists are the bulk of a search payload; dropping them keeps MCP responses under
+# the transport's token cap (open-issue #4).
+_COMPACT_FIELDS = ("id", "title", "url", "year", "source", "query_source")
+
+
+def compact_results(results, fields=None):
+    """Project each search hit down to a small field set.
+
+    Default keeps id/title/url/year/source (+query_source). Pass ``fields`` to
+    choose your own. This is what makes large MCP sweeps affordable — a full
+    result set with abstracts routinely ran 57-340 KB per query."""
+    keys = list(fields) if fields else list(_COMPACT_FIELDS)
+    out = []
+    for r in results or []:
+        row = {k: r.get(k) for k in keys if k in r}
+        # Surface a usable source label even if only query_source is populated.
+        if "source" in keys and not row.get("source") and r.get("query_source"):
+            row["source"] = r.get("query_source")
+        out.append(row)
+    return out
+
+
 def _clean_query(query: str) -> str:
     cleaned = re.sub(r'[()]', ' ', query)
     cleaned = re.sub(r'\b(AND|OR|NOT)\b', '', cleaned, flags=re.IGNORECASE)
@@ -51,8 +74,14 @@ def search_papers(
     force_plus: bool = False,
     search_mode: str = "academic",
     progress_callback=None,
+    compact: bool = False,
+    fields: Optional[list[str]] = None,
 ) -> dict:
-    """Search across configured sources. Returns dict with 'results' and per-source stats."""
+    """Search across configured sources. Returns dict with 'results' and per-source stats.
+
+    ``compact=True`` trims each result to a small field set (see
+    ``compact_results``) so the payload stays small — recommended for MCP/agent
+    use on broad sweeps. ``total`` always reflects the full hit count."""
     if sources is None:
         sources = _config.get_list("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
     elif isinstance(sources, str):
@@ -114,7 +143,9 @@ def search_papers(
         elif source_name in ("openalex", "crossref", "europe_pmc", "core"):
             time.sleep(0.4)
 
-    return {"results": all_results, "sources": source_stats, "total": len(all_results)}
+    results_out = compact_results(all_results, fields) if compact else all_results
+    return {"results": results_out, "sources": source_stats, "total": len(all_results),
+            "compact": bool(compact)}
 
 
 def discover_endpoints(timeout: float = 3.0) -> list[dict]:

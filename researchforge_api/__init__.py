@@ -48,6 +48,7 @@ from researchforge_api._sessions import (
 )
 from researchforge_api._search import (
     search_papers as search, discover_endpoints, lookup_by_title, filter_papers,
+    compact_results,
 )
 from researchforge_api._download import (
     download_paper, download_papers, is_downloaded, get_download_path,
@@ -69,7 +70,7 @@ __all__ = [
     "list_sessions", "load_session", "save_session", "delete_session",
     "get_session_queries", "add_query_to_session", "remove_query_from_session", "set_session_results",
     "update_session",
-    "search", "discover_endpoints", "lookup_by_title", "filter_papers",
+    "search", "discover_endpoints", "lookup_by_title", "filter_papers", "compact_results",
     "download_paper", "download_papers", "is_downloaded", "get_download_path",
     "list_downloads", "list_download_tree", "download_session", "refresh_session_downloads",
     "score_papers", "score_session",
