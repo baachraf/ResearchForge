@@ -251,6 +251,47 @@ The built `ResearchForge.exe` is self-contained: double-click it for the GUI, or
 
 > **Let the agent do it.** You can simply give your AI assistant this repository link and ask it to *"install the ResearchForge MCP server."* The instructions above are all it needs to download the exe and register it into whatever client it's running in.
 
+#### Copy-paste setup prompt
+
+Don't want to run any commands yourself? Paste this into your AI coding agent (Claude Code, opencode, Cursor, …) and it will do the whole setup:
+
+```text
+Set up the ResearchForge MCP server for me.
+
+1. Download the latest ResearchForge.exe from this GitHub release:
+   https://github.com/baachraf/ResearchForge/releases/latest
+   (asset name: ResearchForge.exe). Save it to
+   %LOCALAPPDATA%\Programs\ResearchForge\ResearchForge.exe
+   (create the folder if it doesn't exist). If an older copy is already
+   there, replace it with the freshly downloaded one.
+
+2. It's a Nuitka one-file Windows build. If Windows Defender flags it
+   (Error 225 - file contains a virus) when it first runs, add a Defender
+   exclusion for that path — tell me if you need me to approve an elevated
+   (admin) command.
+
+3. Register it as an MCP server in whichever agent/client you are running
+   in, launching the exe as a stdio server with the single argument --mcp.
+   - Claude Code:
+     claude mcp add researchforge -s user -- "%LOCALAPPDATA%\Programs\ResearchForge\ResearchForge.exe" --mcp
+   - opencode: add a local server whose command is
+     ["<full path>/ResearchForge.exe", "--mcp"]
+   - any other client: use its equivalent stdio-server config with that
+     command and the --mcp argument.
+
+4. Then tell me to restart my agent session so the server loads, and after
+   I restart, confirm the ResearchForge tools are available (there should be
+   53 rf_* tools — e.g. call rf_test_connection).
+
+Notes: on first run it creates ~/.ResearchForge/ (settings, sessions,
+downloads, summaries), shared with the ResearchForge desktop app. Once it's
+registered and my session is restarted, ask me for my LLM provider and API
+key (e.g. DeepSeek) so you can set them via rf_set_llm / rf_set_api_key —
+unless I've already configured them in the desktop GUI.
+```
+
+The agent downloads the exe and registers it, then **asks you to restart your agent session** — that restart is what actually launches the MCP server and exposes the `rf_*` tools.
+
 The exe and the stdio protocol are **client-independent** — the same binary serves Claude Code, opencode, or any MCP client. Only the registration above differs per client. On first use the server creates `~/.ResearchForge/` (settings, sessions, downloads, summaries); this is **shared** with the desktop GUI, so work done via MCP shows up when you later open the app, and vice-versa.
 
 > Requires an MCP-enabled release build (the exe must support the `--mcp` flag). The methods below run the server from source via a Python venv instead.
