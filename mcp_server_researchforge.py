@@ -442,6 +442,30 @@ def rf_generate_related_work(output_dir: str = "", session_id: str = "") -> dict
 
 
 @mcp.tool()
+def rf_generate_patent_landscape(output_dir: str = "", session_id: str = "") -> dict:
+    """Analyse every patent in a session and write PATENT_LANDSCAPE.md beside
+    RELATED_WORK.md. Groups patents by assignee, contrasts claimed scope, and maps
+    white space. Requires a session containing results with doc_type == "patent"
+    (i.e. searched via the patentsview / epo_ops / pqai sources). Per-patent
+    analyses are cached under <model_root>/_patent_cache/, so re-running only pays
+    for new patents. Pass session_id for GUI parity."""
+    return _safe(rf.generate_patent_landscape(output_dir=output_dir, session_id=session_id))
+
+
+@mcp.tool()
+def rf_analyze_patent(patent_json: str, context: str = "", intent: str = "") -> dict:
+    """Analyse a single patent record (JSON with title/abstract/patent_meta) into
+    problem, solution, what is claimed new, assignee, and relation to the research.
+    Use rf_generate_patent_landscape for a whole session instead."""
+    import json as _json
+    try:
+        patent = _json.loads(patent_json)
+    except Exception as e:
+        return {"error": f"patent_json is not valid JSON: {e}"}
+    return _safe(rf.analyze_patent(patent, context=context, intent=intent))
+
+
+@mcp.tool()
 def rf_generate_introduction(output_dir: str = "", session_id: str = "") -> dict:
     """Generate an Introduction section from existing summaries. Pass session_id
     to write to the GUI's summary/<session>/<model>/ folder."""

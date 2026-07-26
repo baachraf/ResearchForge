@@ -37,10 +37,16 @@ DEFAULT_SETTINGS = {
     "section_preaudit_prompt": os.path.join(PROMPTS_DIR, "section_preaudit_prompt.md"),
     "paper_review_synthesis_prompt": os.path.join(PROMPTS_DIR, "paper_review_synthesis_prompt.md"),
     "paper_audit_synthesis_prompt": os.path.join(PROMPTS_DIR, "paper_audit_synthesis_prompt.md"),
+    "per_patent_prompt": os.path.join(PROMPTS_DIR, "per_patent.md"),
+    "patent_landscape_prompt": os.path.join(PROMPTS_DIR, "patent_landscape.md"),
     "llm_provider": "LM Studio",
     "brave_api_key": "",
     "semantic_scholar_api_key": "",
     "core_api_key": "",
+    "patentsview_api_key": "",
+    "epo_ops_key": "",
+    "epo_ops_secret": "",
+    "pqai_api_key": "",
     "pubmed_api_key": "",
     "contact_email": "",
     "deepseek_api_key": "",
@@ -141,7 +147,7 @@ class ConfigManager:
         for key in ("per_paper_prompt", "topic_synthesis_prompt", "global_synthesis_prompt",
                      "query_generation_prompt", "rate_relevance_prompt",
                      "enhance_research_prompt", "enhance_intent_prompt", "related_work_prompt",
-                     "analyze_own_paper_prompt"):
+                     "analyze_own_paper_prompt", "per_patent_prompt", "patent_landscape_prompt"):
             fname = os.path.basename(DEFAULT_SETTINGS.get(key, f"{key}.md"))
             self._data[key] = os.path.join(PROMPTS_DIR, fname)
 

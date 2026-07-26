@@ -36,6 +36,9 @@ from research_downloader.sources.openalex_source import OpenAlexSource
 from research_downloader.sources.crossref_source import CrossRefSource
 from research_downloader.sources.europe_pmc_source import EuropePmcSource
 from research_downloader.sources.core_source import CoreSource
+from research_downloader.sources.patentsview_source import PatentsViewSource
+from research_downloader.sources.epo_ops_source import EpoOpsSource
+from research_downloader.sources.pqai_source import PqaiSource
 from gui import paths
 from research_downloader.relevance_filter import (
     passes_title_filter,
@@ -226,6 +229,17 @@ class SearchWorker(QThread):
             core_creds = self.credentials.get("core", {})
             if core_creds.get("api_key"):
                 available_sources["core"] = CoreSource(credentials={"api_key": core_creds["api_key"]})
+
+            # Patent providers. All key-gated; absent keys simply omit the source.
+            pv_key = self.credentials.get("patentsview", {}).get("api_key", "")
+            if pv_key:
+                available_sources["patentsview"] = PatentsViewSource(credentials={"api_key": pv_key})
+            epo_creds = self.credentials.get("epo_ops", {})
+            if epo_creds.get("consumer_key") and epo_creds.get("consumer_secret"):
+                available_sources["epo_ops"] = EpoOpsSource(credentials=epo_creds)
+            pqai_key = self.credentials.get("pqai", {}).get("api_key", "")
+            if pqai_key:
+                available_sources["pqai"] = PqaiSource(credentials={"api_key": pqai_key})
 
             print(f"[DEBUG] avail={list(available_sources.keys())}", flush=True)
 

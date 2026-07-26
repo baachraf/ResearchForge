@@ -90,6 +90,9 @@ def normalize_result(r: dict, query_key: str = "") -> dict:
     r.setdefault("relevance_score", r.get("relevance_score", 0))
     r.setdefault("score_reason", "")
     r.setdefault("file_size_mb", 0.0)
+    # Patents. Defaults keep every pre-existing result a "paper" with no migration.
+    r.setdefault("doc_type", "paper")
+    r.setdefault("patent_meta", {})
     return r
 
 

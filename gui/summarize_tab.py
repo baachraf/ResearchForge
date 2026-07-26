@@ -2,6 +2,7 @@
 Summarize Tab: view downloaded PDFs organized by topic, run LLM processing.
 """
 import os
+import shutil
 import re
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
@@ -9,7 +10,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QLabel, QTextEdit, QProgressBar, QCheckBox,
     QMessageBox, QHeaderView, QDialog, QSizePolicy, QSplitter,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QThread
 
 from gui.workers import LLMProcessWorker
 from gui.llm_provider import (
@@ -226,6 +227,12 @@ class SummarizeTab(QWidget):
         self.btn_introduction = QPushButton("Introduction")
         self.btn_introduction.clicked.connect(lambda: self._select_mode("introduction"))
         hb_tree_btns.addWidget(self.btn_introduction)
+        self.btn_patent = QPushButton("Patent Landscape")
+        self.btn_patent.setToolTip(
+            "Analyse every patent in this session and write PATENT_LANDSCAPE.md. "
+            "Requires patent results (PatentsView / EPO OPS / PQAI sources).")
+        self.btn_patent.clicked.connect(lambda: self._select_mode("patent_landscape"))
+        hb_tree_btns.addWidget(self.btn_patent)
         self.btn_all = QPushButton("All")
         self.btn_all.clicked.connect(lambda: self._select_mode("all"))
         hb_tree_btns.addWidget(self.btn_all)
@@ -567,12 +574,14 @@ class SummarizeTab(QWidget):
             "global": ("Global Synthesis", "regenerate the global summary"),
             "related_work": ("Related Work", "regenerate the Related Work section"),
             "introduction": ("Introduction", "regenerate the Introduction section"),
+            "patent_landscape": ("Patent Landscape", "re-analyse every patent and regenerate the report"),
             "all": ("All", "re-process everything from scratch"),
         }
         ml = mode_labels.get(mode, ("", ""))
         has_existing = False
-        if mode in ("related_work", "introduction"):
-            out_paths = {"related_work": "RELATED_WORK.md", "introduction": "INTRODUCTION.md"}
+        if mode in ("related_work", "introduction", "patent_landscape"):
+            out_paths = {"related_work": "RELATED_WORK.md", "introduction": "INTRODUCTION.md",
+                         "patent_landscape": "PATENT_LANDSCAPE.md"}
             has_existing = os.path.isfile(os.path.join(model_output_root, out_paths.get(mode, "")))
         else:
             has_existing = existing > 0
@@ -599,6 +608,9 @@ class SummarizeTab(QWidget):
             return
         if mode == "introduction":
             self._on_introduction(endpoint, model, provider_name, api_key, force_rerun)
+            return
+        if mode == "patent_landscape":
+            self._on_patent_landscape(force_rerun)
             return
 
         prompt_path = self.cfg.get("per_paper_prompt", "")
@@ -726,6 +738,7 @@ class SummarizeTab(QWidget):
         self.btn_topic.setEnabled(True)
         self.btn_global.setEnabled(True)
         self.btn_related.setEnabled(True)
+        self.btn_patent.setEnabled(True)
         self.btn_introduction.setEnabled(True)
         self.btn_all.setEnabled(True)
         self.btn_start_stop.setText("Start")
@@ -781,6 +794,7 @@ class SummarizeTab(QWidget):
         self.btn_topic.setEnabled(True)
         self.btn_global.setEnabled(True)
         self.btn_related.setEnabled(True)
+        self.btn_patent.setEnabled(True)
         self.btn_introduction.setEnabled(True)
         self.btn_all.setEnabled(True)
         self.btn_start_stop.setText("Start")
@@ -1000,6 +1014,7 @@ class SummarizeTab(QWidget):
             self.btn_topic.setEnabled(True)
             self.btn_global.setEnabled(True)
             self.btn_related.setEnabled(True)
+            self.btn_patent.setEnabled(True)
             self.btn_introduction.setEnabled(True)
             self.btn_all.setEnabled(True)
             self.btn_start_stop.setText("Start")
@@ -1011,3 +1026,71 @@ class SummarizeTab(QWidget):
         if not hasattr(self, '_selected_mode'):
             self._selected_mode = "per_paper"
         self._on_process(self._selected_mode)
+
+
+class _PatentLandscapeWorker(QThread):
+    """Runs the patent landscape pipeline off the UI thread.
+
+    Delegates to ``researchforge_api.generate_patent_landscape`` rather than
+    reimplementing it, so the GUI and MCP produce byte-identical output in the
+    same location. The API layer has no Qt dependency, so this is safe.
+    """
+    progress = Signal(str)
+    done = Signal(dict)
+
+    def __init__(self, session_id: str, force: bool = False, parent=None):
+        super().__init__(parent)
+        self.session_id = session_id
+        self.force = force
+
+    def run(self):
+        try:
+            self.progress.emit("Analysing patents...")
+            import researchforge_api as rf
+            res = rf.generate_patent_landscape(session_id=self.session_id)
+            self.done.emit(res if isinstance(res, dict) else {"error": "unexpected result"})
+        except Exception as e:
+            self.done.emit({"error": str(e)})
+
+
+def _on_patent_landscape(self, force_rerun: bool = False):
+    """Patent Landscape button handler. Bound onto SummarizeTab below."""
+    session_id = self._effective_session_name()
+    if not session_id:
+        QMessageBox.warning(self, "No session", "Load or create a session first.")
+        return
+
+    if force_rerun:
+        # Overwrite means re-analyse: drop the per-patent cache so every patent
+        # is sent to the LLM again.
+        try:
+            root = paths.model_output_root(self.cfg, session_id, self.cfg.get("llm_model", ""))
+            cache = os.path.join(root, "_patent_cache")
+            if os.path.isdir(cache):
+                shutil.rmtree(cache)
+        except Exception as e:
+            self.log.emit(f"Could not clear patent cache: {e}")
+
+    self.btn_patent.setEnabled(False)
+    self._patent_worker = _PatentLandscapeWorker(session_id, force_rerun, self)
+    self._patent_worker.progress.connect(self.log.emit)
+    self._patent_worker.done.connect(self._on_patent_landscape_done)
+    self._patent_worker.start()
+
+
+def _on_patent_landscape_done(self, res: dict):
+    self.btn_patent.setEnabled(True)
+    self._patent_worker = None
+    if "error" in res:
+        self.log.emit(f"Patent landscape failed: {res['error']}")
+        QMessageBox.warning(self, "Patent Landscape", res["error"])
+        return
+    msg = f"Patent landscape written: {res.get('patents', 0)} patents"
+    if res.get("without_claims"):
+        msg += f" ({res['without_claims']} metadata-only — no claims text)"
+    self.log.emit(msg + " -> " + str(res.get("path", "")))
+    QMessageBox.information(self, "Patent Landscape", msg)
+
+
+SummarizeTab._on_patent_landscape = _on_patent_landscape
+SummarizeTab._on_patent_landscape_done = _on_patent_landscape_done

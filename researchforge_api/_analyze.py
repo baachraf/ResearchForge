@@ -922,3 +922,173 @@ def create_session_full(
     path = _sessions.save_session(name, session_data)
     session_data["_path"] = path
     return session_data
+
+
+# ─── patents ─────────────────────────────────────────────────────────────────
+#
+# Patents never travel through the PDF download/extract path: their text arrives
+# with the search hit and lives in ``result["patent_meta"]``. These functions read
+# the session records directly, so a patent with no PDF on disk still analyses.
+#
+# Prompts are filled with ``.replace()`` rather than ``.format()`` — the patent
+# templates contain literal ``{...}`` citation examples that ``str.format`` would
+# raise KeyError on. Same reasoning as ``RelevanceScoringWorker``.
+
+def _fill(template: str, values: dict) -> str:
+    out = template
+    for k, v in values.items():
+        out = out.replace("{" + k + "}", str(v if v not in (None, "") else "Not available"))
+    return out
+
+
+def _patent_results(session_id: str) -> list:
+    """Every ``doc_type == 'patent'`` result in a session.
+
+    ``session["results"]`` is a flat list (see ``_sessions.ensure_full_schema``),
+    not a per-query mapping.
+    """
+    from researchforge_api import _sessions
+    sess = _sessions.load_session(session_id)
+    if not sess or "error" in sess:
+        return []
+    return [
+        r for r in (sess.get("results") or [])
+        if isinstance(r, dict) and r.get("doc_type") == "patent"
+    ]
+
+
+def analyze_patent(patent: dict, *, prompt_key: str = "per_patent_prompt",
+                   context: str = "", intent: str = "") -> dict:
+    """Analyse one patent record. Returns ``{"text": ...}`` or ``{"error": ...}``."""
+    prompt = _prompts.get_prompt(prompt_key)
+    if not prompt:
+        return {"error": f"Prompt '{prompt_key}' not found"}
+
+    meta = patent.get("patent_meta", {}) or {}
+    claims = meta.get("claims_text", "") or ""
+    full_prompt = _fill(prompt, {
+        "publication_number": meta.get("publication_number", patent.get("id", "")),
+        "title": patent.get("title", ""),
+        "assignee": meta.get("assignee", ""),
+        "priority_date": meta.get("priority_date", ""),
+        "abstract": patent.get("abstract", ""),
+        "claims_text": claims,
+        "context": context,
+        "intent": intent,
+    })
+
+    client = _llm.create_client_from_config(timeout=180.0)
+    try:
+        res = client.chat.completions.create(
+            model=_config.get("llm_model", ""),
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=0.2, max_tokens=8000, timeout=180.0,
+        )
+        text = res.choices[0].message.content or ""
+        if not text.strip():
+            return {"error": "LLM returned an empty analysis"}
+        return {"text": text, "claims_available": bool(claims.strip())}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        try:
+            client._client.close()
+        except Exception:
+            pass
+
+
+def generate_patent_landscape(
+    output_dir: str = "",
+    *,
+    session_id: str = "",
+    prompt_key: str = "patent_landscape_prompt",
+    per_patent_prompt_key: str = "per_patent_prompt",
+) -> dict:
+    """Analyse every patent in a session, then synthesise ``PATENT_LANDSCAPE.md``.
+
+    Per-patent analyses are cached under the model root so re-running only pays
+    for patents that have not been analysed yet.
+    """
+    try:
+        model_root = _resolve_model_root(session_id, output_dir)
+    except ValueError as e:
+        return {"error": str(e)}
+    os.makedirs(model_root, exist_ok=True)
+
+    patents = _patent_results(session_id)
+    if not patents:
+        return {"error": "No patents in this session. Search a patent source first."}
+
+    prompt = _prompts.get_prompt(prompt_key)
+    if not prompt:
+        return {"error": f"Prompt '{prompt_key}' not found"}
+
+    context, intent = _session_context_intent(session_id)
+    cache_dir = os.path.join(model_root, "_patent_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+
+    analyses, failed, no_claims = [], [], 0
+    for p in patents:
+        meta = p.get("patent_meta", {}) or {}
+        pub = meta.get("publication_number") or p.get("id") or ""
+        safe = re.sub(r'[\/*?:"<>|]', "_", str(pub)) or "unknown"
+        cache_path = os.path.join(cache_dir, f"{safe}.md")
+
+        if os.path.exists(cache_path):
+            with open(cache_path, encoding="utf-8") as fh:
+                analyses.append(fh.read())
+            continue
+
+        res = analyze_patent(p, prompt_key=per_patent_prompt_key,
+                             context=context, intent=intent)
+        if "error" in res:
+            failed.append(f"{pub}: {res['error']}")
+            continue
+        if not res.get("claims_available"):
+            no_claims += 1
+        block = f"### {pub} — {p.get('title','')}\n\n{res['text']}"
+        with open(cache_path, "w", encoding="utf-8") as fh:
+            fh.write(block)
+        analyses.append(block)
+
+    if not analyses:
+        return {"error": "Every patent analysis failed: " + "; ".join(failed[:3])}
+
+    full_prompt = _fill(prompt, {
+        "patent_analyses": "\n\n---\n\n".join(analyses),
+        "context": context,
+        "intent": intent,
+    })
+
+    out_path = paths.patent_landscape_file(model_root)
+    client = _llm.create_client_from_config(timeout=180.0)
+    try:
+        res = client.chat.completions.create(
+            model=_config.get("llm_model", ""),
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=0.3, max_tokens=60000, timeout=180.0,
+        )
+        text = res.choices[0].message.content or ""
+        if not text.strip():
+            return {"error": "LLM returned an empty landscape report"}
+        header = f"# PATENT LANDSCAPE\n\n_{len(analyses)} patents analysed"
+        if no_claims:
+            header += f"; {no_claims} without claims text (metadata only)"
+        header += "._\n\n"
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(header + text)
+        return {
+            "path": out_path,
+            "chars": len(text),
+            "patents": len(analyses),
+            "without_claims": no_claims,
+            "failed": failed,
+            "model_root": model_root,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        try:
+            client._client.close()
+        except Exception:
+            pass

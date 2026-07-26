@@ -1,7 +1,7 @@
 # ResearchForge MCP — Agent Guide
 
 > **Read this first.** This file tells an AI agent how to drive ResearchForge via
-> its 53 MCP tools (`rf_*`). The README covers installation; this covers usage.
+> its 55 MCP tools (`rf_*`). The README covers installation; this covers usage.
 
 ## What ResearchForge does
 
@@ -278,3 +278,42 @@ MCP looks identical to one built via the GUI.
    The result persists to disk — retrieve it, don't re-run.
 5. **Semantic Scholar + PubMed return 0 sometimes.** Transient rate limits. Retry
    or use arXiv (keyless, reliable).
+
+
+## Patents
+
+Patent providers (`patentsview`, `epo_ops`, `pqai`) are ordinary `rf_search` sources —
+tick them like any other. What differs is downstream.
+
+**Patents never go through download/extract.** Their text arrives with the search hit and
+lives in `result["patent_meta"]` (`claims_text`, `assignee`, `publication_number`,
+`priority_date`, `cpc`). A patent with no PDF on disk still analyses fully. Do not call
+`rf_download_session` expecting patent text — it is already in the session.
+
+**Every result now carries `doc_type`** (`"paper"` or `"patent"`). It defaults to
+`"paper"`, so pre-existing sessions are unaffected.
+
+```
+1. rf_search(query="...", sources=["patentsview","epo_ops"], session_id="S", query_name="q1")
+2. rf_generate_patent_landscape(session_id="S")
+   → writes PATENT_LANDSCAPE.md beside RELATED_WORK.md
+```
+
+`rf_generate_patent_landscape` analyses each patent (problem / solution / what is claimed
+new / assignee / relation to the research), caches each under
+`<model_root>/_patent_cache/`, then synthesises the cross-patent view: grouping by
+assignee, contrasting claimed scope, and mapping white space. Re-running only pays for
+patents not yet analysed.
+
+A patents-only session produces the landscape report and nothing else — that is the
+supported "patents are the target" case, not an error.
+
+**Claims may be missing.** PatentsView's claim endpoints are upstream beta, and EPO OPS
+full text is mainly EP/WO. When claims are absent the per-patent analysis says
+`CLAIMS NOT AVAILABLE` and the landscape report excludes that patent from scope
+conclusions rather than silently inflating them. The report header states how many
+patents were metadata-only.
+
+**Never treat the output as legal advice.** The prompts describe claim scope and refuse
+infringement, validity, and freedom-to-operate conclusions by design. If a user asks for
+those, say it requires a patent attorney.

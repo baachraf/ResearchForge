@@ -13,6 +13,7 @@ Desktop application that searches academic paper databases, downloads PDFs, and 
 ## Features
 
 - **Multi-source search**: arXiv, OpenAlex, Crossref, Europe PMC, PubMed, Semantic Scholar, CORE, Brave, DuckDuckGo — nine providers, most needing no API key
+- **Patent search**: PatentsView (US), EPO OPS (worldwide), PQAI (semantic prior-art) — patents are analysed as patents (problem / solution / what is claimed / assignee) and synthesised into a standalone **Patent Landscape** report
 - **Session creator**: AI-enhanced research description with automatic query generation and "Analyze My Paper" mode
 - **Local PDF injection**: add your own PDFs or entire folders; they auto-participate in relevance scoring and download workflows
 - **Relevance scoring**: LLM rates each paper 0–100 against your research context, with keyword-based fallback
@@ -187,14 +188,15 @@ Agent: [calls rf_search → rf_download_papers → rf_analyze_paper × 5]
 | **Global synthesis** | "Generate a global cross-topic summary" |
 | **Related work** | "Generate a related work section from my summaries" |
 | **Audit** your paper | "Audit my paper at D:/mypaper.pdf — section by section" |
+| **Patent landscape** | "Search patents on rPPG, then build the patent landscape report" |
 | **Full pipeline** | "Run the complete pipeline on D:/downloads/topics/" |
 | **Configure** everything | "Set my DeepSeek API key to sk-... and switch the model to deepseek-chat" |
 | **Manage sessions** | "List my saved sessions and load the Morphology_Notch one" |
 | **Edit prompts** | "Show me the per-paper analysis prompt and update it" |
 
-**53 MCP tools** cover every button, dropdown, and checkbox from the GUI — including **resumable sessions**: create and search one day, then reload the same session later to download, score, and synthesize, with all state (queries, results, scores, downloads) saved in the session exactly as the GUI persists it.
+**55 MCP tools** cover every button, dropdown, and checkbox from the GUI — including **resumable sessions**: create and search one day, then reload the same session later to download, score, and synthesize, with all state (queries, results, scores, downloads) saved in the session exactly as the GUI persists it.
 
-> ** Agents: read [`AGENTS.md`](AGENTS.md) first.** It documents the session-driven workflow, the `session_id` rule (required for GUI parity), the timeout/persistence pattern (heavy ops like audit/synthesize time out at the MCP client but persist to disk — retrieve via `rf_get_audit_result`), and a per-tool reference for all 53 tools.
+> ** Agents: read [`AGENTS.md`](AGENTS.md) first.** It documents the session-driven workflow, the `session_id` rule (required for GUI parity), the timeout/persistence pattern (heavy ops like audit/synthesize time out at the MCP client but persist to disk — retrieve via `rf_get_audit_result`), and a per-tool reference for all 55 tools.
 
 ### How it works
 
@@ -281,7 +283,7 @@ Set up the ResearchForge MCP server for me.
 
 4. Then tell me to restart my agent session so the server loads, and after
    I restart, confirm the ResearchForge tools are available (there should be
-   53 rf_* tools — e.g. call rf_test_connection).
+   55 rf_* tools — e.g. call rf_test_connection).
 
 Notes: on first run it creates ~/.ResearchForge/ (settings, sessions,
 downloads, summaries), shared with the ResearchForge desktop app. Once it's
@@ -323,11 +325,11 @@ pip install "mcp[cli]"
 
 > Use forward slashes in paths. On Linux/macOS, the venv python is at `venv/bin/python`.
 
-3. **Restart opencode**. The 53 `rf_*` tools are now available.
+3. **Restart opencode**. The 55 `rf_*` tools are now available.
 
 ### Install for Claude Code (global)
 
-Register the server once at **user scope** (`-s user`) so the 53 `rf_*` tools are available in **every** Claude Code project, not just the current directory:
+Register the server once at **user scope** (`-s user`) so the 55 `rf_*` tools are available in **every** Claude Code project, not just the current directory:
 
 ```bash
 claude mcp add researchforge -s user -- /path/to/ResearchForge/venv/Scripts/python.exe /path/to/ResearchForge/mcp_server_researchforge.py
@@ -378,7 +380,7 @@ The GUI and MCP server are fully interoperable:
 - **Continue from your terminal** — the MCP server reads the same settings. Search, download, and analyze from opencode/Claude Code.
 - **Switch back to the GUI** — sessions created via MCP appear in the session list. Downloads and summaries are visible in the respective tabs.
 
-### Available MCP tools (53)
+### Available MCP tools (55)
 
 <details>
 <summary>Click to expand full tool list</summary>
@@ -393,6 +395,7 @@ The GUI and MCP server are fully interoperable:
 | **Download** | `rf_download_paper`, `rf_download_papers`, `rf_download_session`, `rf_refresh_session_downloads`, `rf_is_downloaded`, `rf_list_downloads`, `rf_list_download_tree` |
 | **Score** | `rf_score_papers`, `rf_score_session` |
 | **Analyze** | `rf_analyze_paper`, `rf_analyze_own_paper`, `rf_synthesize_topic`, `rf_synthesize_global`, `rf_generate_related_work`, `rf_generate_introduction`, `rf_generate_queries`, `rf_enhance_research`, `rf_run_full_pipeline`, `rf_create_session` |
+| **Patents** | `rf_analyze_patent`, `rf_generate_patent_landscape` |
 | **Summaries** | `rf_list_summaries`, `rf_get_cached_analysis` |
 | **Audit** | `rf_audit_paper`, `rf_detect_sections`, `rf_get_section_text`, `rf_save_audit_results`, `rf_get_audit_result` |
 
@@ -408,7 +411,7 @@ The GUI and MCP server are fully interoperable:
 |------------------|---------|
 | `main.py` | Entry point: launches QApplication + MainWindow |
 | `llm_pdf_engine.py` | Standalone CLI engine (no GUI dependency), hardcoded fallback prompts |
-| `mcp_server_researchforge.py` | MCP server (FastMCP, stdio) — exposes 53 tools for opencode/Claude Code |
+| `mcp_server_researchforge.py` | MCP server (FastMCP, stdio) — exposes 55 tools for opencode/Claude Code |
 | `researchforge_api/` | Headless API layer — wraps existing modules for MCP and scripting use |
 
 ### `gui/`: PySide6 UI

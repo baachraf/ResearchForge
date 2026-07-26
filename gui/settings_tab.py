@@ -149,6 +149,13 @@ class SettingsTab(QWidget):
         qs.addStretch()
         self.src_europepmc = QCheckBox("Europe PMC"); self.src_europepmc.setToolTip(_KEYLESS); qs.addWidget(self.src_europepmc)
         qs.addStretch()
+        # Patent providers share these rows rather than adding a third.
+        self.src_patentsview = QCheckBox("PatentsView")
+        self._patentsview_wrap = self._wrap_gated(self.src_patentsview); qs.addWidget(self._patentsview_wrap)
+        qs.addStretch()
+        self.src_epo_ops = QCheckBox("EPO OPS")
+        self._epo_ops_wrap = self._wrap_gated(self.src_epo_ops); qs.addWidget(self._epo_ops_wrap)
+        qs.addStretch()
         gs.addLayout(qs)
 
         # Row 2 — remaining implemented + CORE (keyed, backend pending)
@@ -168,6 +175,9 @@ class SettingsTab(QWidget):
         self._brave_wrap = self._wrap_gated(self.src_brave); qs2.addWidget(self._brave_wrap)
         qs2.addStretch()
         self.src_duckduckgo = QCheckBox("DuckDuckGo"); self.src_duckduckgo.setChecked(True); qs2.addWidget(self.src_duckduckgo)
+        qs2.addStretch()
+        self.src_pqai = QCheckBox("PQAI")
+        self._pqai_wrap = self._wrap_gated(self.src_pqai); qs2.addWidget(self._pqai_wrap)
         qs2.addStretch()
         gs.addLayout(qs2)
 
@@ -262,6 +272,13 @@ class SettingsTab(QWidget):
         # is set via the Set Keys dialog.
         self._gate_keyed_source(self.src_brave, self._brave_wrap, "brave_api_key", "")
         self._gate_keyed_source(self.src_core, self._core_wrap, "core_api_key", "")
+        _PAT = "Patents — searches granted patents, not papers"
+        self._gate_keyed_source(self.src_patentsview, self._patentsview_wrap,
+                                "patentsview_api_key", f"{_PAT} (US)")
+        self._gate_keyed_source(self.src_epo_ops, self._epo_ops_wrap,
+                                "epo_ops_key", f"{_PAT} (worldwide; full text mainly EP/WO)")
+        self._gate_keyed_source(self.src_pqai, self._pqai_wrap,
+                                "pqai_api_key", f"{_PAT} — semantic prior-art search")
 
     def _gate_keyed_source(self, checkbox, wrapper, cfg_key, enabled_tip):
         has_key = bool(self.cfg.get(cfg_key, "").strip())
@@ -340,6 +357,9 @@ class SettingsTab(QWidget):
         self.src_crossref.setChecked("crossref" in sources)
         self.src_europepmc.setChecked("europe_pmc" in sources)
         self.src_core.setChecked("core" in sources)
+        self.src_patentsview.setChecked("patentsview" in sources)
+        self.src_epo_ops.setChecked("epo_ops" in sources)
+        self.src_pqai.setChecked("pqai" in sources)
         self._update_source_enables()
 
         def _save_sources():
@@ -353,11 +373,15 @@ class SettingsTab(QWidget):
             if self.src_crossref.isChecked(): srcs.append("crossref")
             if self.src_europepmc.isChecked(): srcs.append("europe_pmc")
             if self.src_core.isChecked(): srcs.append("core")
+            if self.src_patentsview.isChecked(): srcs.append("patentsview")
+            if self.src_epo_ops.isChecked(): srcs.append("epo_ops")
+            if self.src_pqai.isChecked(): srcs.append("pqai")
             self.cfg.set("default_sources", srcs)
 
         for cb in [self.src_arxiv, self.src_s2, self.src_duckduckgo, self.src_brave,
                    self.src_pubmed, self.src_openalex, self.src_crossref,
-                   self.src_europepmc, self.src_core]:
+                   self.src_europepmc, self.src_core,
+                   self.src_patentsview, self.src_epo_ops, self.src_pqai]:
             cb.toggled.connect(_save_sources)
 
     def _save_to_config(self):
@@ -396,6 +420,12 @@ class SettingsTab(QWidget):
             sources.append("europe_pmc")
         if self.src_core.isChecked():
             sources.append("core")
+        if self.src_patentsview.isChecked():
+            sources.append("patentsview")
+        if self.src_epo_ops.isChecked():
+            sources.append("epo_ops")
+        if self.src_pqai.isChecked():
+            sources.append("pqai")
         self.cfg.set("default_sources", sources)
 
     def _on_save(self):
@@ -411,6 +441,8 @@ class SettingsTab(QWidget):
             self.model_combo.clear()
             for k in ("deepseek_api_key", "gemini_api_key", "brave_api_key",
                       "semantic_scholar_api_key", "core_api_key",
+                      "patentsview_api_key", "epo_ops_key", "epo_ops_secret",
+                      "pqai_api_key",
                       "pubmed_api_key", "contact_email"):
                 self.cfg.set(k, "")
             self.output_root.clear()
@@ -481,6 +513,10 @@ class KeysDialog(QDialog):
         ("core_api_key", "CORE:", True, "required"),
         ("semantic_scholar_api_key", "Semantic Scholar:", True, "optional"),
         ("pubmed_api_key", "PubMed key:", True, "optional"),
+        ("patentsview_api_key", "PatentsView:", True, "required"),
+        ("epo_ops_key", "EPO OPS key:", True, "required"),
+        ("epo_ops_secret", "EPO OPS secret:", True, "required"),
+        ("pqai_api_key", "PQAI token:", True, "required"),
         ("contact_email", "Contact email:", False, "optional"),
     ]
 

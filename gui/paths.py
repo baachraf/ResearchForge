@@ -187,6 +187,12 @@ def introduction_file(model_root: str) -> str:
     return os.path.join(model_root, "INTRODUCTION.md")
 
 
+def patent_landscape_file(model_root: str) -> str:
+    """``<model_root>/PATENT_LANDSCAPE.md`` — sibling of RELATED_WORK.md. Written
+    only when the session holds at least one ``doc_type == "patent"`` result."""
+    return os.path.join(model_root, "PATENT_LANDSCAPE.md")
+
+
 def relevance_scores_file(model_root: str) -> str:
     """``<model_root>/_relevance_scores.json`` — map of ``<pdf> -> score``,
     written incrementally by the per-paper worker."""

@@ -1457,6 +1457,13 @@ class SearchDownloadTab(QWidget):
                 "enabled": True,
             },
             "core": {"api_key": self.cfg.get("core_api_key", ""), "enabled": True},
+            "patentsview": {"api_key": self.cfg.get("patentsview_api_key", ""), "enabled": True},
+            "epo_ops": {
+                "consumer_key": self.cfg.get("epo_ops_key", ""),
+                "consumer_secret": self.cfg.get("epo_ops_secret", ""),
+                "enabled": True,
+            },
+            "pqai": {"api_key": self.cfg.get("pqai_api_key", ""), "enabled": True},
             "contact_email": self.cfg.get("contact_email", ""),
         }
         self._search_creds = creds

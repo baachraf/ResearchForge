@@ -13,6 +13,9 @@ from research_downloader.sources.openalex_source import OpenAlexSource
 from research_downloader.sources.crossref_source import CrossRefSource
 from research_downloader.sources.europe_pmc_source import EuropePmcSource
 from research_downloader.sources.core_source import CoreSource
+from research_downloader.sources.patentsview_source import PatentsViewSource
+from research_downloader.sources.epo_ops_source import EpoOpsSource
+from research_downloader.sources.pqai_source import PqaiSource
 from gui.discovery import discover as _discover_endpoints
 from difflib import SequenceMatcher
 
@@ -114,6 +117,19 @@ def search_papers(
     core_key = _config.get("core_api_key", "")
     if core_key:
         available_sources["core"] = CoreSource(credentials={"api_key": core_key})
+
+    # Patent providers. All key-gated; absent keys simply omit the source.
+    pv_key = _config.get("patentsview_api_key", "")
+    if pv_key:
+        available_sources["patentsview"] = PatentsViewSource(credentials={"api_key": pv_key})
+    epo_key = _config.get("epo_ops_key", "")
+    epo_secret = _config.get("epo_ops_secret", "")
+    if epo_key and epo_secret:
+        available_sources["epo_ops"] = EpoOpsSource(
+            credentials={"consumer_key": epo_key, "consumer_secret": epo_secret})
+    pqai_key = _config.get("pqai_api_key", "")
+    if pqai_key:
+        available_sources["pqai"] = PqaiSource(credentials={"api_key": pqai_key})
 
     all_results = []
     source_stats = {}
