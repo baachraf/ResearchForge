@@ -836,6 +836,11 @@ class SummarizeTab(QWidget):
         model = self.cfg.get("llm_model", "default")
         model_output_root = paths.model_output_root(self.cfg, download_name, model)
 
+        # Patents live outside the paper tree, so they are appended explicitly via
+        # the shared helper. A patents-only session is valid — Related Work can be
+        # built from patents alone.
+        patent_text = paths.read_patent_analyses(model_output_root)
+
         global_path = paths.global_summary_file(model_output_root)
         source_text = ""
         if os.path.isfile(global_path):
@@ -843,21 +848,25 @@ class SummarizeTab(QWidget):
                 source_text = f.read()
         else:
             summaries_dir = paths.topic_reviews_parent(model_output_root)
-            if not os.path.isdir(summaries_dir):
-                QMessageBox.warning(self, "No Summaries", "Run Global synthesis first (or at least Per-Paper).")
-                return
             parts = []
-            for folder in sorted(os.listdir(summaries_dir)):
-                cache_path = paths.topic_cache_dir(model_output_root, folder)
-                if os.path.isdir(cache_path):
-                    md_files = sorted([f for f in os.listdir(cache_path) if f.endswith(".md")])
-                    for mf in md_files:
-                        with open(os.path.join(cache_path, mf), "r", encoding="utf-8") as f:
-                            parts.append(f.read())
-            if not parts:
-                QMessageBox.warning(self, "No Summaries", "No paper summaries found. Run Per-Paper first.")
+            if os.path.isdir(summaries_dir):
+                for folder in sorted(os.listdir(summaries_dir)):
+                    cache_path = paths.topic_cache_dir(model_output_root, folder)
+                    if os.path.isdir(cache_path):
+                        md_files = sorted([f for f in os.listdir(cache_path) if f.endswith(".md")])
+                        for mf in md_files:
+                            with open(os.path.join(cache_path, mf), "r", encoding="utf-8") as f:
+                                parts.append(f.read())
+            if not parts and not patent_text:
+                QMessageBox.warning(
+                    self, "No Summaries",
+                    "No paper summaries or patent analyses found.\n"
+                    "Run Per-Paper first, or Patent Landscape if this is a patent session.")
                 return
             source_text = "\n\n---\n\n".join(parts)
+
+        if patent_text:
+            source_text = (source_text + "\n\n" + patent_text) if source_text else patent_text
 
         prompt = self.cfg.load_prompt("related_work_prompt")
         if not prompt:
@@ -931,10 +940,16 @@ class SummarizeTab(QWidget):
                         if mf.endswith(".md"):
                             with open(os.path.join(cache_path, mf), "r", encoding="utf-8") as f:
                                 parts.append(f.read())
-        if not parts:
-            QMessageBox.warning(self, "No Summaries", "No paper summaries found. Run Per-Paper first.")
+        patent_text = paths.read_patent_analyses(model_output_root)
+        if not parts and not patent_text:
+            QMessageBox.warning(
+                self, "No Summaries",
+                "No paper summaries or patent analyses found.\n"
+                "Run Per-Paper first, or Patent Landscape if this is a patent session.")
             return
         paper_analyses = "\n\n---\n\n".join(parts)
+        if patent_text:
+            paper_analyses = (paper_analyses + "\n\n" + patent_text) if paper_analyses else patent_text
 
         prompt = self.cfg.load_prompt("introduction_prompt")
         if not prompt:
@@ -1065,7 +1080,7 @@ def _on_patent_landscape(self, force_rerun: bool = False):
         # is sent to the LLM again.
         try:
             root = paths.model_output_root(self.cfg, session_id, self.cfg.get("llm_model", ""))
-            cache = os.path.join(root, "_patent_cache")
+            cache = paths.patent_cache_dir(root)
             if os.path.isdir(cache):
                 shutil.rmtree(cache)
         except Exception as e:

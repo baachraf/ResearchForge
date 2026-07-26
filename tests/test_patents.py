@@ -191,3 +191,65 @@ class TestLandscapeSelection:
              patch.object(_analyze, "_resolve_model_root", return_value="/tmp/x"):
             out = _analyze.generate_patent_landscape(session_id="s")
         assert "error" in out and "No patents" in out["error"]
+
+
+class TestRelatedWorkIntegration:
+    """Patents must reach Related Work / Introduction, and must arrive labelled."""
+
+    def _cache(self, tmp_path, *names):
+        d = tmp_path / "_patent_cache"
+        d.mkdir()
+        for n in names:
+            (d / f"{n}.md").write_text(f"### {n}\n\nAcme claims a method.", encoding="utf-8")
+        return str(tmp_path)
+
+    def test_no_patents_returns_empty_string(self, tmp_path):
+        assert paths.read_patent_analyses(str(tmp_path)) == ""
+
+    def test_patent_analyses_are_gathered_and_labelled(self, tmp_path):
+        root = self._cache(tmp_path, "US1", "US2")
+        out = paths.read_patent_analyses(root)
+        assert "US1" in out and "US2" in out
+        assert "not peer-reviewed" in out, "patents must be labelled for the prompt"
+
+    def test_related_work_source_appends_patents_to_papers(self, tmp_path):
+        from researchforge_api import _analyze
+        root = self._cache(tmp_path, "US1")
+        with open(os.path.join(root, "GLOBAL_SUMMARY.md"), "w", encoding="utf-8") as f:
+            f.write("Global synthesis of the papers.")
+        out = _analyze._gather_related_work_source(root)
+        assert "Global synthesis of the papers." in out
+        assert "US1" in out, "patents must not be dropped when papers exist"
+
+    def test_patents_only_session_still_produces_source(self, tmp_path):
+        """A patents-only session is valid — Related Work from patents alone."""
+        from researchforge_api import _analyze
+        root = self._cache(tmp_path, "US1")
+        out = _analyze._gather_related_work_source(root)
+        assert "US1" in out
+
+    def test_patent_cache_is_outside_the_paper_tree(self, tmp_path):
+        """The paper gatherer must never pick patents up implicitly."""
+        from researchforge_api import _analyze
+        root = self._cache(tmp_path, "US1")
+        # The paper gatherer walks detailed_topic_reviews/ only, so it sees nothing.
+        assert _analyze._gather_per_paper_analyses(root) == ""
+        # And the cache genuinely sits outside that tree, not merely unread.
+        cache = os.path.realpath(paths.patent_cache_dir(root))
+        reviews = os.path.realpath(paths.topic_reviews_parent(root))
+        assert os.path.commonpath([cache, reviews]) == os.path.realpath(root)
+        assert not cache.startswith(reviews + os.sep)
+
+
+class TestPromptPatentRules:
+    """The prompts carry the citation form and the hedge, or a patent gets cited
+    like a peer-reviewed paper."""
+
+    @pytest.mark.parametrize("fname", ["related_work.md", "introduction.md"])
+    def test_prompt_has_patent_rules(self, fname):
+        from gui.app_info import resource
+        text = open(resource(os.path.join("config", "prompts", fname)), encoding="utf-8").read()
+        assert "PATENTS" in text
+        assert "has NO author" in text, "must forbid Author et al. for patents"
+        assert "claims a method" in text, "must give the hedged form"
+        assert "NEVER WRITE" in text, "must forbid asserting patents as results"

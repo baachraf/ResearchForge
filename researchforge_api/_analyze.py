@@ -500,16 +500,24 @@ def _gather_related_work_source(model_root: str) -> str:
     concatenated per-paper analyses when no global synthesis exists yet.
     Returns "" if neither is available.
     """
+    base = ""
     global_path = paths.global_summary_file(model_root)
     if os.path.isfile(global_path):
         try:
             with open(global_path, "r", encoding="utf-8") as f:
-                txt = f.read().strip()
-            if txt:
-                return txt
+                base = f.read().strip()
         except OSError:
-            pass
-    return _gather_per_paper_analyses(model_root)
+            base = ""
+    if not base:
+        base = _gather_per_paper_analyses(model_root)
+
+    # Patents ride in _patent_cache/, outside the paper tree the gatherers walk,
+    # so they must be appended explicitly. The prompt is responsible for citing
+    # them as patents and hedging them as claims rather than findings.
+    patents = paths.read_patent_analyses(model_root)
+    if patents and base:
+        return base + "\n\n" + patents
+    return patents or base
 
 
 def generate_related_work(
@@ -1024,7 +1032,7 @@ def generate_patent_landscape(
         return {"error": f"Prompt '{prompt_key}' not found"}
 
     context, intent = _session_context_intent(session_id)
-    cache_dir = os.path.join(model_root, "_patent_cache")
+    cache_dir = paths.patent_cache_dir(model_root)
     os.makedirs(cache_dir, exist_ok=True)
 
     analyses, failed, no_claims = [], [], 0

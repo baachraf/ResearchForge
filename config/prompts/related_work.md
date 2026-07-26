@@ -94,6 +94,39 @@ HEDGING LANGUAGE — mandatory
 - Never attribute certainty to a claim the source paper itself hedges
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PATENTS — different source class, different rules
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Source material after a "=== PATENTS ===" separator is patent analyses, NOT papers.
+Patents are not peer reviewed. Examination tests novelty and non-obviousness against
+prior art — it does not test whether the invention works, and it does not replicate any
+number. A patent claim is an assertion of ownership, not a validated finding.
+
+1. CITATION FORM — a patent has NO author. Never write "Author et al. [X]" for a patent.
+   In-text: the assignee — e.g. "Acme Health [12]" — or "a granted patent [12]" when the
+   patent is unassigned or individually held.
+   Reference list: `Assignee, "Title," Publication Number, Date.`
+   e.g. `Acme Health, "Contactless pulse measurement," US11123456B2, 2 Mar. 2021.`
+
+2. MANDATORY HEDGE — every patent sentence must mark it as a claim, not a result.
+   WRITE:      "Acme Health claims a method for ... [12]"
+               "a granted patent assigned to Acme describes ... [12]"
+   NEVER WRITE: "Acme Health showed/demonstrated/achieved ... [12]"
+               "it has been shown that ... [12]"  (citing a patent)
+   Reported numbers inside a patent are unverified: attribute them
+   ("the patent reports r=0.9") — never state them as established.
+
+3. WHAT A PATENT IS GOOD EVIDENCE FOR — that an approach was conceived, claimed, and
+   owned by a particular party at a particular date. Use patents for priority, for
+   commercial activity, and for what is protected. Do NOT use them as evidence that a
+   technique performs well.
+
+4. NEVER repeat a patent's own characterisation of prior art as fact. A patent's
+   background section frames earlier work to favour its own novelty argument.
+
+5. If the source material contains ONLY patents and no papers, say so explicitly rather
+   than implying a peer-reviewed literature base exists.
+
 EVIDENCE QUALITY FLAGS — mandatory hedging per flag
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Each per-paper analysis includes Evidence Quality Flags (Section 13). When the source material flags a paper, apply the corresponding qualification in prose — never cite a flagged paper with the same authority as a fully reported peer-reviewed study:

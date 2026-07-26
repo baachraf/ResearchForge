@@ -187,6 +187,45 @@ def introduction_file(model_root: str) -> str:
     return os.path.join(model_root, "INTRODUCTION.md")
 
 
+def patent_cache_dir(model_root: str) -> str:
+    """``<model_root>/_patent_cache/`` — one ``<pubnumber>.md`` per analysed patent.
+
+    A sibling of ``detailed_topic_reviews/``, deliberately NOT inside it: the
+    paper-summary gatherers walk that tree, and patents must only reach Related
+    Work through the explicit, hedged path in ``read_patent_analyses``.
+    """
+    return os.path.join(model_root, "_patent_cache")
+
+
+def read_patent_analyses(model_root: str) -> str:
+    """Concatenated per-patent analyses, or "" when the session has no patents.
+
+    The single definition shared by the GUI and the headless API so the two
+    cannot drift — the bug class this module exists to prevent. This is the one
+    helper here that touches the filesystem; everything else is pure path math.
+    """
+    cache = patent_cache_dir(model_root)
+    if not os.path.isdir(cache):
+        return ""
+    parts = []
+    for name in sorted(os.listdir(cache)):
+        if not name.endswith(".md"):
+            continue
+        try:
+            with open(os.path.join(cache, name), "r", encoding="utf-8") as fh:
+                txt = fh.read().strip()
+            if txt:
+                parts.append(txt)
+        except OSError:
+            pass
+    if not parts:
+        return ""
+    return (
+        "\n\n=== PATENTS (not peer-reviewed — claims, not validated findings) ===\n\n"
+        + "\n\n---\n\n".join(parts)
+    )
+
+
 def patent_landscape_file(model_root: str) -> str:
     """``<model_root>/PATENT_LANDSCAPE.md`` — sibling of RELATED_WORK.md. Written
     only when the session holds at least one ``doc_type == "patent"`` result."""
