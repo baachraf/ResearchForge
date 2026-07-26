@@ -1,12 +1,24 @@
 CRITICAL — READ BEFORE WRITING ANYTHING:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-IN-TEXT CITATION FORMAT — no exceptions:
+IN-TEXT CITATION FORMAT — two source classes, one numbered list:
+
+FOR PAPERS (the default — everything except patents):
 - Always: "FirstAuthorLastName et al. [X]" — first author's LAST NAME only, lowercase "et al.", then number
 - Single author: "Allen [5]" (no "et al.")
 - NEVER write full author lists inline: "Cheng Ding & Chenwei Wu [2]" is WRONG
 - NEVER write given names inline: "Martínez-Vargas Juan David et al. [3]" is WRONG
 - NEVER embed venue/title inline — that belongs in the reference list only
+
+FOR PATENTS (source material under a "=== PATENTS ===" separator):
+- A patent has NO author. "Author et al. [X]" is WRONG for a patent — the rule above
+  does not apply to them.
+- Use the ASSIGNEE: "Acme Health [12]", or "a granted patent [12]" if unassigned.
+- Inventors are NOT authors. Never promote an inventor name into the "et al." form.
+- Full rules — including the mandatory hedging — are in the PATENTS section below.
+  Read it before citing anything from the patents block.
+
+Both classes share ONE consecutive [1]–[N] reference list.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ABSOLUTE RULE — CITE EVERY RELEVANT PAPER
@@ -48,19 +60,31 @@ BEFORE OUTPUT — CROSS-CHECK (MANDATORY, never skip)
 2. Count how many unique [X] citation numbers appear in your body text
 3. If any paper from the source is missing from your text, ADD IT — even as a brief mention in a group citation
 4. Verify numbering is [1], [2], [3]... consecutive with NO gaps
-5. Verify all in-text citations use "Author et al. [X]" format
-6. Fix all violations BEFORE outputting
+5. Verify in-text citations by source class: PAPERS use "Author et al. [X]";
+   PATENTS use the assignee, e.g. "Acme Health [12]". Do NOT "fix" a patent
+   citation into the "et al." form — that is the error, not the correction.
+6. Verify every patent sentence reads as a CLAIM ("claims", "describes"), never
+   as a demonstrated result ("showed", "achieved")
+7. Fix all violations BEFORE outputting
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REFERENCE LIST FORMAT — MANDATORY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Papers:
   [1] All Authors (full list), "Title," *Venue*, vol., no., pp., Year. DOI.
   [2] All Authors (full list), "Title," *Venue*, vol., no., pp., Year. DOI.
-  ...consecutive through [N].
+
+  Patents (NO author field — assignee first, then publication number):
+  [3] Acme Health, "Contactless pulse measurement," US11123456B2, 2 Mar. 2021.
+  [4] Unassigned, "Optical sensing arrangement," EP3456789A1, 14 Jan. 2019.
+
+  ...one consecutive list [1]–[N] covering both classes.
 
 - Every reference MUST start with [X] in brackets
 - Numbers consecutive, no gaps
-- All authors in full — never "et al." in the reference list
+- All authors in full — never "et al." in the reference list (papers only)
+- Patents have no authors: assignee, title, publication number, date. Never insert
+  inventor names into the author position
 - Include ALL papers cited in the text — the reference list should be long
 - ⚠️ If authors are unknown (listed as "Not stated in this paper" in source data), write the title and venue only — NEVER write "Author names not available". Use a title-based in-text handle (e.g., "the VideoCompression study [X]"). NEVER fabricate or infer author names.
 

@@ -253,3 +253,42 @@ class TestPromptPatentRules:
         assert "has NO author" in text, "must forbid Author et al. for patents"
         assert "claims a method" in text, "must give the hedged form"
         assert "NEVER WRITE" in text, "must forbid asserting patents as results"
+
+
+class TestPromptHasNoCitationContradiction:
+    """A patent block further down the prompt is useless if the header still says
+    the paper format has 'no exceptions' — the model sides with the absolute rule."""
+
+    PROMPTS = ["related_work.md", "introduction.md"]
+
+    def _text(self, fname):
+        from gui.app_info import resource
+        return open(resource(os.path.join("config", "prompts", fname)), encoding="utf-8").read()
+
+    @pytest.mark.parametrize("fname", PROMPTS)
+    def test_header_no_longer_claims_no_exceptions(self, fname):
+        t = self._text(fname)
+        assert "IN-TEXT CITATION FORMAT — no exceptions" not in t, (
+            "header still forecloses the patent exception")
+
+    @pytest.mark.parametrize("fname", PROMPTS)
+    def test_patent_rule_is_stated_in_the_header_not_only_later(self, fname):
+        """The exception must appear near the top, where the paper rule is stated."""
+        t = self._text(fname)
+        assert "FOR PATENTS" in t
+        head = t[:t.index("FOR PATENTS")]
+        assert "FOR PAPERS" in head, "paper/patent split must be in the same header block"
+        assert t.index("FOR PATENTS") < len(t) // 2, "patent rule buried too deep"
+
+    @pytest.mark.parametrize("fname", PROMPTS)
+    def test_selfcheck_does_not_force_et_al_on_patents(self, fname):
+        """The cross-check step used to 'correct' patent citations into the wrong form."""
+        t = self._text(fname)
+        assert 'Verify all in-text citations use "Author et al. [X]" format' not in t
+        assert 'that is the error, not the correction' in t
+
+    @pytest.mark.parametrize("fname", PROMPTS)
+    def test_reference_list_shows_a_patent_example(self, fname):
+        t = self._text(fname)
+        assert "Publication Number" in t or "US11123456B2" in t
+        assert "inventor names into the author position" in t
