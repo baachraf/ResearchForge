@@ -163,6 +163,56 @@ Upload your paper (PDF or `.tex`) and run a structured pre-submission self-audit
 
 ---
 
+## Patent Search
+
+Patents sit alongside the academic providers as a searchable document class. Tick a
+patent source on the Settings tab and its hits join your results table like any other —
+but they are analysed as patents, and they produce their own report.
+
+### Providers
+
+| Provider | Coverage | Key | Cost |
+|----------|----------|-----|------|
+| **PatentsView** | US granted + pre-grant | Self-serve API key | Free |
+| **EPO OPS** | Worldwide bibliographic; full text mainly EP/WO | OAuth2 consumer key + secret | Free tier, 4 GB/week |
+| **PQAI** | Semantic prior-art search | Token, by request | Free for academic / non-commercial |
+
+Keys go in **Set Keys** on the Settings tab. Until a key is present the source stays
+greyed out, exactly like CORE and Brave.
+
+> Patents are never downloaded as PDFs for analysis. Their text — including claims —
+> arrives with the search result, so a patent analyses fully without any file on disk.
+
+### What each patent yields
+
+| Field | Content |
+|-------|---------|
+| Problem | What the patent sets out to solve |
+| Solution | The mechanism, in plain language |
+| What is claimed new | The broadest independent claim restated plainly — the only part that is legally owned |
+| Assignee | Who owns it, and what it suggests about their direction |
+| Relation to the research | DIRECT OVERLAP / ADJACENT / BACKGROUND / UNRELATED, justified against a named claim element |
+
+### Patent Landscape report
+
+The **Patent Landscape** button on the Generate Reports tab writes
+`PATENT_LANDSCAPE.md` beside `RELATED_WORK.md`: patents grouped by assignee, a claimed-
+scope map contrasting how competitors differ from one another, a filing timeline, and
+the white space nobody in the set has claimed. Search only patent sources and this
+report is the only output — useful when the patents, not the papers, are the target.
+
+Per-patent analyses are cached, so re-running only pays for patents you have not
+analysed yet.
+
+**Limits, stated plainly.** Where claims text is unavailable — PatentsView's claim
+endpoints are upstream beta, and EPO OPS full text is mainly EP/WO — the analysis says
+so and that patent is excluded from scope conclusions instead of silently inflating
+them. The report header gives the metadata-only count. The output describes claim
+scope; it is **not legal advice**, and infringement, validity, and freedom-to-operate
+questions are deferred to a patent attorney by design.
+
+---
+
 ## 🤖 MCP Integration
 
 On top of the desktop GUI, ResearchForge exposes a **headless API layer** (`researchforge_api/`) and an **MCP server** (`mcp_server_researchforge.py`) that let you drive the entire pipeline from your preferred AI coding assistant — **opencode**, **Claude Code**, or any MCP-compatible client.
