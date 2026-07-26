@@ -12,6 +12,8 @@ Assignee: {assignee}
 Priority date: {priority_date}
 Abstract: {abstract}
 Claims: {claims_text}
+Cited patents: {cited_patents}
+Cited non-patent literature: {cited_literature}
 
 RESEARCH:
 Context: {context}
@@ -53,7 +55,19 @@ How does this patent stand against the research context above? Choose exactly on
 Justify in two or three sentences, naming the specific claim element that drives the
 verdict. Where the research differs, state the difference concretely.
 
-## 6. CITATION
+## 6. PRIOR ART THIS PATENT CITES
+Only if cited references were supplied above; otherwise write
+`No cited references retrieved.` and nothing else.
+
+List the cited **non-patent literature** — these are papers, and they are search
+leads worth following. Then name the most relevant cited **patents** and what their
+presence suggests about how crowded the space was at filing.
+
+Treat this list as *disclosure*, not endorsement: it shows what the applicant and
+examiner had to acknowledge, not what is most important. And never repeat the
+patent's characterisation of any cited work as fact.
+
+## 7. CITATION
 `{assignee}, "{title}," {publication_number}, {priority_date}.`
 
 RULES

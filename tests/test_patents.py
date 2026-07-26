@@ -77,28 +77,40 @@ class TestAdaptersWithoutKeys:
 
 
 class TestPatentsViewAdapter:
-    def _resp(self, payload):
+    def _resp(self, payload, status=200):
         m = MagicMock()
         m.json.return_value = payload
-        m.raise_for_status.return_value = None
+        m.status_code = status
         return m
 
+    def _src(self):
+        s = PatentsViewSource(credentials={"api_key": "k"})
+        s._MIN_INTERVAL = 0          # no pacing sleep in tests
+        return s
+
     def test_marks_doc_type_and_extracts_meta(self):
-        search = self._resp({"patents": [{
-            "patent_id": "11111111",
-            "patent_title": "Remote photoplethysmography apparatus",
-            "patent_date": "2021-03-02",
-            "patent_abstract": "An apparatus for measuring pulse from video.",
-            "assignees": [{"assignee_organization": "Acme Health"}],
-            "inventors": [{"inventor_name_first": "A", "inventor_name_last": "B"}],
-            "cpc_current": [{"cpc_group_id": "A61B5/024"}],
-        }]})
-        claims = self._resp({"g_claims": [
-            {"claim_sequence": 1, "claim_text": "A method comprising...", "claim_dependent": None},
-            {"claim_sequence": 2, "claim_text": "The method of claim 1...", "claim_dependent": 1},
-        ]})
-        with patch("requests.get", side_effect=[search, claims]):
-            out = PatentsViewSource(credentials={"api_key": "k"}).search("rppg")
+        def fake_get(url, params=None, headers=None, timeout=None):
+            if url.endswith("/patent/"):
+                return self._resp({"patents": [{
+                    "patent_id": "11111111",
+                    "patent_title": "Remote photoplethysmography apparatus",
+                    "patent_date": "2021-03-02",
+                    "patent_abstract": "An apparatus for measuring pulse from video.",
+                    "assignees": [{"assignee_organization": "Acme Health"}],
+                    "inventors": [{"inventor_name_first": "A", "inventor_name_last": "B"}],
+                    "cpc_current": [{"cpc_group_id": "A61B5/024"}],
+                }]})
+            if "g_claim" in url:
+                return self._resp({"g_claims": [
+                    {"patent_id": "11111111", "claim_sequence": 1,
+                     "claim_text": "A method comprising...", "claim_dependent": None},
+                    {"patent_id": "11111111", "claim_sequence": 2,
+                     "claim_text": "The method of claim 1...", "claim_dependent": 1},
+                ]})
+            return self._resp({})
+
+        with patch("requests.get", side_effect=fake_get):
+            out = self._src().search("rppg")
 
         assert len(out) == 1
         r = out[0]
@@ -114,16 +126,25 @@ class TestPatentsViewAdapter:
 
     def test_claims_failure_degrades_instead_of_dropping_hit(self):
         """The claims endpoint is beta upstream — a failure must not lose the patent."""
-        search = self._resp({"patents": [{
-            "patent_id": "222", "patent_title": "T", "patent_date": "2020-01-01",
-            "patent_abstract": "abs", "assignees": [], "inventors": [], "cpc_current": [],
-        }]})
-        with patch("requests.get", side_effect=[search, Exception("beta endpoint 500")]):
-            out = PatentsViewSource(credentials={"api_key": "k"}).search("x")
+        def fake_get(url, params=None, headers=None, timeout=None):
+            if url.endswith("/patent/"):
+                return self._resp({"patents": [{
+                    "patent_id": "222", "patent_title": "T", "patent_date": "2020-01-01",
+                    "patent_abstract": "abs", "assignees": [], "inventors": [],
+                    "cpc_current": [],
+                }]})
+            raise Exception("beta endpoint 500")
+
+        with patch("requests.get", side_effect=fake_get):
+            out = self._src().search("x")
 
         assert len(out) == 1, "patent must survive a claims failure"
         assert out[0]["patent_meta"]["claims_text"] == ""
         assert out[0]["abstract"] == "abs"
+
+    def test_http_error_on_search_returns_empty(self):
+        with patch("requests.get", side_effect=lambda *a, **k: self._resp({}, status=500)):
+            assert self._src().search("x") == []
 
 
 class TestEpoOpsAdapter:
@@ -292,3 +313,133 @@ class TestPromptHasNoCitationContradiction:
         t = self._text(fname)
         assert "Publication Number" in t or "US11123456B2" in t
         assert "inventor names into the author position" in t
+
+
+class TestRateLimitingAndBatching:
+    """45 calls/min upstream. A search must cost a small constant number of calls,
+    not 1 + 2N, or a 50-patent search throttles."""
+
+    def _resp(self, payload, status=200):
+        m = MagicMock()
+        m.json.return_value = payload
+        m.status_code = status
+        return m
+
+    def _search_payload(self, n):
+        return {"patents": [{
+            "patent_id": str(1000 + i), "patent_title": f"Patent {i}",
+            "patent_date": "2021-01-01", "patent_abstract": "abs",
+            "assignees": [{"assignee_organization": "Acme"}],
+            "inventors": [], "cpc_current": [],
+        } for i in range(n)]}
+
+    def test_call_count_is_constant_not_per_patent(self):
+        src = PatentsViewSource(credentials={"api_key": "k"})
+        src._MIN_INTERVAL = 0
+        calls = []
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            calls.append(url)
+            if "patent/" in url and "citation" not in url:
+                return self._resp(self._search_payload(20))
+            return self._resp({})
+
+        with patch("requests.get", side_effect=fake_get):
+            out = src.search("rppg", max_results=20)
+
+        assert len(out) == 20
+        assert len(calls) <= 4, f"20 patents should cost ~4 calls, took {len(calls)}"
+
+    def test_claims_are_grouped_back_to_the_right_patent(self):
+        src = PatentsViewSource(credentials={"api_key": "k"})
+        src._MIN_INTERVAL = 0
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            if url.endswith("/patent/"):
+                return self._resp(self._search_payload(2))
+            if "g_claim" in url:
+                return self._resp({"g_claims": [
+                    {"patent_id": "1000", "claim_sequence": 1,
+                     "claim_text": "Claim for first", "claim_dependent": None},
+                    {"patent_id": "1001", "claim_sequence": 1,
+                     "claim_text": "Claim for second", "claim_dependent": None},
+                ]})
+            return self._resp({})
+
+        with patch("requests.get", side_effect=fake_get):
+            out = src.search("x", max_results=2)
+
+        by_num = {r["patent_meta"]["publication_number"]: r for r in out}
+        assert "Claim for first" in by_num["US1000"]["patent_meta"]["claims_text"]
+        assert "Claim for second" in by_num["US1001"]["patent_meta"]["claims_text"]
+        assert "Claim for second" not in by_num["US1000"]["patent_meta"]["claims_text"]
+
+    def test_429_backs_off_then_succeeds(self):
+        src = PatentsViewSource(credentials={"api_key": "k"})
+        src._MIN_INTERVAL = 0
+        seq = [self._resp({}, status=429), self._resp(self._search_payload(1))]
+
+        with patch("requests.get", side_effect=lambda *a, **k: seq.pop(0)), \
+             patch("time.sleep") as slept:
+            out = src.search("x", max_results=1)
+
+        assert len(out) == 1, "must retry past a 429 rather than return nothing"
+        assert slept.called, "must actually back off"
+
+    def test_internal_patent_id_never_leaks_to_the_session(self):
+        src = PatentsViewSource(credentials={"api_key": "k"})
+        src._MIN_INTERVAL = 0
+        with patch("requests.get", side_effect=lambda *a, **k: self._resp(self._search_payload(1))):
+            out = src.search("x", max_results=1)
+        assert "_patent_id" not in out[0]["patent_meta"]
+
+
+class TestCitationHarvesting:
+    def _resp(self, payload):
+        m = MagicMock(); m.json.return_value = payload; m.status_code = 200
+        return m
+
+    def test_cited_patents_and_literature_are_captured(self):
+        src = PatentsViewSource(credentials={"api_key": "k"})
+        src._MIN_INTERVAL = 0
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            if url.endswith("/patent/"):
+                return self._resp({"patents": [{
+                    "patent_id": "1000", "patent_title": "T", "patent_date": "2021-01-01",
+                    "patent_abstract": "a", "assignees": [], "inventors": [], "cpc_current": [],
+                }]})
+            if "g_us_patent_citation" in url:
+                return self._resp({"g_us_patent_citations": [
+                    {"patent_id": "1000", "citation_patent_id": "999"}]})
+            if "g_other_reference" in url:
+                return self._resp({"g_other_references": [
+                    {"patent_id": "1000",
+                     "otherreference_text": "Verkruysse et al., Optics Express 2008"}]})
+            return self._resp({})
+
+        with patch("requests.get", side_effect=fake_get):
+            out = src.search("x", max_results=1)
+
+        meta = out[0]["patent_meta"]
+        assert meta["cited_patents"] == ["US999"]
+        assert "Verkruysse" in meta["cited_literature"][0]
+
+    def test_citation_endpoint_failure_does_not_lose_the_patent(self):
+        src = PatentsViewSource(credentials={"api_key": "k"})
+        src._MIN_INTERVAL = 0
+
+        def fake_get(url, params=None, headers=None, timeout=None):
+            if url.endswith("/patent/"):
+                return self._resp({"patents": [{
+                    "patent_id": "1000", "patent_title": "T", "patent_date": "2021-01-01",
+                    "patent_abstract": "a", "assignees": [], "inventors": [], "cpc_current": [],
+                }]})
+            raise Exception("citation endpoint down")
+
+        with patch("requests.get", side_effect=fake_get):
+            out = src.search("x", max_results=1)
+
+        assert len(out) == 1
+        assert out[0]["patent_meta"]["cited_patents"] == []
+        assert out[0]["patent_meta"]["claims_text"] == ""

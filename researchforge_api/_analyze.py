@@ -981,6 +981,8 @@ def analyze_patent(patent: dict, *, prompt_key: str = "per_patent_prompt",
         "priority_date": meta.get("priority_date", ""),
         "abstract": patent.get("abstract", ""),
         "claims_text": claims,
+        "cited_patents": ", ".join(meta.get("cited_patents") or []),
+        "cited_literature": "\n".join(meta.get("cited_literature") or []),
         "context": context,
         "intent": intent,
     })
