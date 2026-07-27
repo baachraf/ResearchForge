@@ -1,0 +1,1006 @@
+{
+ "ops:world-patent-data": {
+  "@xmlns": {
+   "ops": "http://ops.epo.org",
+   "$": "http://www.epo.org/exchange",
+   "xlink": "http://www.w3.org/1999/xlink"
+  },
+  "ops:biblio-search": {
+   "@total-result-count": "1352",
+   "@publications-count": "2",
+   "ops:query": {
+    "$": "ta = photoplethysmography",
+    "@syntax": "CQL"
+   },
+   "ops:range": {
+    "@begin": "1",
+    "@end": "10"
+   },
+   "ops:search-result": {
+    "exchange-documents": [
+     {
+      "exchange-document": {
+       "@system": "ops.epo.org",
+       "@family-id": "98864002",
+       "@country": "US",
+       "@doc-number": "20260206982",
+       "@kind": "A1",
+       "bibliographic-data": {
+        "publication-reference": {
+         "document-id": [
+          {
+           "@document-id-type": "docdb",
+           "country": {
+            "$": "US"
+           },
+           "doc-number": {
+            "$": "20260206982"
+           },
+           "kind": {
+            "$": "A1"
+           },
+           "date": {
+            "$": "20260723"
+           }
+          },
+          {
+           "@document-id-type": "epodoc",
+           "doc-number": {
+            "$": "US20260206982"
+           },
+           "date": {
+            "$": "20260723"
+           }
+          }
+         ]
+        },
+        "classifications-ipcr": {
+         "classification-ipcr": [
+          {
+           "@sequence": "1",
+           "text": {
+            "$": "A47C  31/    12            A I"
+           }
+          },
+          {
+           "@sequence": "2",
+           "text": {
+            "$": "A61B   5/    00            A I"
+           }
+          },
+          {
+           "@sequence": "3",
+           "text": {
+            "$": "A61B   5/    11            A I"
+           }
+          },
+          {
+           "@sequence": "4",
+           "text": {
+            "$": "A61B   5/  1455            A I"
+           }
+          }
+         ]
+        },
+        "patent-classifications": {
+         "patent-classification": [
+          {
+           "@sequence": "1",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "47"
+           },
+           "subclass": {
+            "$": "C"
+           },
+           "main-group": {
+            "$": "31"
+           },
+           "subgroup": {
+            "$": "123"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "2",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "1102"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "3",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "1102"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "4",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "14551"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "5",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "4818"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "6",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "4818"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "7",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "6802"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "8",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "6891"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "9",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "7267"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "10",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "7267"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "11",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "7278"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "12",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "2562"
+           },
+           "subgroup": {
+            "$": "0247"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "13",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "02416"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "14",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "14542"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          },
+          {
+           "@sequence": "15",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "4809"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "EP"
+           }
+          }
+         ]
+        },
+        "application-reference": {
+         "@doc-id": "653097136",
+         "document-id": [
+          {
+           "@document-id-type": "docdb",
+           "country": {
+            "$": "US"
+           },
+           "doc-number": {
+            "$": "202619447427"
+           },
+           "kind": {
+            "$": "A"
+           }
+          },
+          {
+           "@document-id-type": "epodoc",
+           "doc-number": {
+            "$": "US202619447427"
+           },
+           "date": {
+            "$": "20260113"
+           }
+          },
+          {
+           "@document-id-type": "original",
+           "doc-number": {
+            "$": "19447427"
+           }
+          }
+         ]
+        },
+        "priority-claims": {
+         "priority-claim": [
+          {
+           "@sequence": "1",
+           "@kind": "national",
+           "document-id": [
+            {
+             "@document-id-type": "epodoc",
+             "doc-number": {
+              "$": "US202563746499P"
+             },
+             "date": {
+              "$": "20250117"
+             }
+            },
+            {
+             "@document-id-type": "original",
+             "doc-number": {
+              "$": "63746499"
+             }
+            }
+           ]
+          },
+          {
+           "@sequence": "2",
+           "@kind": "national",
+           "document-id": {
+            "@document-id-type": "epodoc",
+            "doc-number": {
+             "$": "US202619447427"
+            },
+            "date": {
+             "$": "20260113"
+            }
+           }
+          }
+         ]
+        },
+        "parties": {
+         "applicants": {
+          "applicant": [
+           {
+            "@sequence": "1",
+            "@data-format": "epodoc",
+            "applicant-name": {
+             "name": {
+              "$": "SLEEP NUMBER CORP [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "1",
+            "@data-format": "original",
+            "applicant-name": {
+             "name": {
+              "$": "Sleep Number Corporation"
+             }
+            }
+           }
+          ]
+         },
+         "inventors": {
+          "inventor": [
+           {
+            "@sequence": "1",
+            "@data-format": "epodoc",
+            "inventor-name": {
+             "name": {
+              "$": "GARCIA MOLINA GARY N [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "2",
+            "@data-format": "epodoc",
+            "inventor-name": {
+             "name": {
+              "$": "SIYAHJANI FARZAD [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "3",
+            "@data-format": "epodoc",
+            "inventor-name": {
+             "name": {
+              "$": "BABEIZADEH SAEED [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "4",
+            "@data-format": "epodoc",
+            "inventor-name": {
+             "name": {
+              "$": "PALERM CESAR C [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "5",
+            "@data-format": "epodoc",
+            "inventor-name": {
+             "name": {
+              "$": "RAO MEGHA RAJAM [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "6",
+            "@data-format": "epodoc",
+            "inventor-name": {
+             "name": {
+              "$": "SOHN KWANGHYUN [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "1",
+            "@data-format": "original",
+            "inventor-name": {
+             "name": {
+              "$": "Garcia Molina, Gary N."
+             }
+            }
+           },
+           {
+            "@sequence": "2",
+            "@data-format": "original",
+            "inventor-name": {
+             "name": {
+              "$": "Siyahjani, Farzad"
+             }
+            }
+           },
+           {
+            "@sequence": "3",
+            "@data-format": "original",
+            "inventor-name": {
+             "name": {
+              "$": "Babeizadeh, Saeed"
+             }
+            }
+           },
+           {
+            "@sequence": "4",
+            "@data-format": "original",
+            "inventor-name": {
+             "name": {
+              "$": "Palerm, Cesar C."
+             }
+            }
+           },
+           {
+            "@sequence": "5",
+            "@data-format": "original",
+            "inventor-name": {
+             "name": {
+              "$": "Rao, Megha Rajam"
+             }
+            }
+           },
+           {
+            "@sequence": "6",
+            "@data-format": "original",
+            "inventor-name": {
+             "name": {
+              "$": "Sohn, Kwanghyun"
+             }
+            }
+           }
+          ]
+         }
+        },
+        "invention-title": {
+         "$": "BED SYSTEM HAVING FEATURES FOR DETERMINING PPG, SPO2, AND/OR HYPOXIA BURDEN FROM A BCG SIGNAL",
+         "@lang": "en"
+        }
+       },
+       "abstract": {
+        "@lang": "en",
+        "p": {
+         "$": "A bed has a mattress. A user sensor is configured to: sense a user on the bed; and transmit, to a computing system, a user stream from the sensing of the user on the bed. The computing system including at least one processor and memory, the computing system configured to: receive the user stream; generate, from the user stream, a plurality of time-shifted balistocardiography (BCG) data steams; for a first time window: submit the plurality of time-shifted BCG data streams to a photoplethysmography (PPG) synthesizer; and receive, from the PPG synthesizer, a PPG value for the user for the first time window."
+        }
+       }
+      }
+     },
+     {
+      "exchange-document": {
+       "@system": "ops.epo.org",
+       "@family-id": "100577726",
+       "@country": "US",
+       "@doc-number": "20260207068",
+       "@kind": "A1",
+       "bibliographic-data": {
+        "publication-reference": {
+         "document-id": [
+          {
+           "@document-id-type": "docdb",
+           "country": {
+            "$": "US"
+           },
+           "doc-number": {
+            "$": "20260207068"
+           },
+           "kind": {
+            "$": "A1"
+           },
+           "date": {
+            "$": "20260723"
+           }
+          },
+          {
+           "@document-id-type": "epodoc",
+           "doc-number": {
+            "$": "US20260207068"
+           },
+           "date": {
+            "$": "20260723"
+           }
+          }
+         ]
+        },
+        "classifications-ipcr": {
+         "classification-ipcr": [
+          {
+           "@sequence": "1",
+           "text": {
+            "$": "A61B   5/   021            A I"
+           }
+          },
+          {
+           "@sequence": "2",
+           "text": {
+            "$": "A61B   5/   024            A I"
+           }
+          }
+         ]
+        },
+        "patent-classifications": {
+         "patent-classification": [
+          {
+           "@sequence": "1",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "02116"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "2",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "02125"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "3",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "5"
+           },
+           "subgroup": {
+            "$": "02422"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          },
+          {
+           "@sequence": "4",
+           "classification-scheme": {
+            "@office": "EP",
+            "@scheme": "CPCI"
+           },
+           "section": {
+            "$": "A"
+           },
+           "class": {
+            "$": "61"
+           },
+           "subclass": {
+            "$": "B"
+           },
+           "main-group": {
+            "$": "2560"
+           },
+           "subgroup": {
+            "$": "0228"
+           },
+           "classification-value": {
+            "$": "I"
+           },
+           "generating-office": {
+            "$": "US"
+           }
+          }
+         ]
+        },
+        "application-reference": {
+         "@doc-id": "653104450",
+         "document-id": [
+          {
+           "@document-id-type": "docdb",
+           "country": {
+            "$": "US"
+           },
+           "doc-number": {
+            "$": "202519035477"
+           },
+           "kind": {
+            "$": "A"
+           }
+          },
+          {
+           "@document-id-type": "epodoc",
+           "doc-number": {
+            "$": "US202519035477"
+           },
+           "date": {
+            "$": "20250123"
+           }
+          },
+          {
+           "@document-id-type": "original",
+           "doc-number": {
+            "$": "19035477"
+           }
+          }
+         ]
+        },
+        "priority-claims": {
+         "priority-claim": {
+          "@sequence": "1",
+          "@kind": "national",
+          "document-id": {
+           "@document-id-type": "epodoc",
+           "doc-number": {
+            "$": "US202519035477"
+           },
+           "date": {
+            "$": "20250123"
+           }
+          }
+         }
+        },
+        "parties": {
+         "applicants": {
+          "applicant": [
+           {
+            "@sequence": "1",
+            "@data-format": "epodoc",
+            "applicant-name": {
+             "name": {
+              "$": "GE PREC HEALTHCARE LLC [US]"
+             }
+            }
+           },
+           {
+            "@sequence": "1",
+            "@data-format": "original",
+            "applicant-name": {
+             "name": {
+              "$": "GE Precision Healthcare LLC"
+             }
+            }
+           }
+          ]
+         },
+         "inventors": {
+          "inventor": [
+           {
+            "@sequence": "1",
+            "@data-format": "epodoc",
+            "inventor-name": {
+             "name": {
+              "$": "KARVINEN SAMULI VILLE VALTTERI [FI]"
+             }
+            }
+           },
+           {
+            "@sequence": "1",
+            "@data-format": "original",
+            "inventor-name": {
+             "name": {
+              "$": "Karvinen, Samuli Ville Valtteri"
+             }
+            }
+           }
+          ]
+         }
+        },
+        "invention-title": {
+         "$": "METHOD FOR MONITORING BLOOD PRESSURE",
+         "@lang": "en"
+        }
+       },
+       "abstract": {
+        "@lang": "en",
+        "p": {
+         "$": "[0000]    Methods and systems are provided herein for measuring a blood pressure (BP) of a subject when continuous monitoring is desired, and a traditional cuff-based blood pressure measurement system may be restrictive. The proposed systems and methods measure the BP using dual photoplethysmography (PPG) sensors integrated into the cuff, which can dramatically reduce the frequency of cuff inflation while providing continuous BP monitoring. The dual PPG sensors monitor a BP of a patient by calculating a Pulse Wave Velocity (PWV) of blood in a blood vessel of the patient based on a Pulse Transit Time (PTT), and an PPG Intensity Ratio (PIR). The patient's BP may be measured continuously based on these physiological parameters, with the cuff serving as a reference to periodically recalibrate the system automatically, thereby enhancing accuracy and reducing a demand for frequent cuff inflation."
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}

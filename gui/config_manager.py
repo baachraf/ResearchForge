@@ -100,6 +100,7 @@ class ConfigManager:
     def __init__(self, config_path: str = SETTINGS_PATH):
         self.config_path = config_path
         self._data: Dict[str, Any] = {}
+        self._dirty: set = set()   # keys changed by THIS instance since the last save
         self._ensure_dirs()
         self._migrate_bundled()
         self.load()
@@ -152,19 +153,52 @@ class ConfigManager:
             self._data[key] = os.path.join(PROMPTS_DIR, fname)
 
     def save(self):
+        """Write settings, merging onto whatever is on disk now.
+
+        `_data` is a snapshot taken at construction, and this file is shared by
+        long-lived processes: the GUI plus one `--mcp` server per registered
+        client. Writing the whole snapshot back makes the last writer win, so a
+        server started this morning silently erases an API key the GUI saved this
+        afternoon — observed 2026-07-27, EPO OPS credentials wiped between two
+        runs while six MCP servers were live.
+
+        Only keys this instance actually changed are written over the on-disk
+        copy; concurrent edits to other keys survive. Same reload-merge rule the
+        session writer already uses.
+        """
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+        on_disk = {}
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    on_disk = json.load(f)
+            except Exception:
+                on_disk = {}
+        if not isinstance(on_disk, dict):
+            on_disk = {}
+
+        merged = dict(on_disk)
+        for k in self._dirty:
+            merged[k] = self._data[k]
+        for k, v in self._data.items():
+            merged.setdefault(k, v)
+
         with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=2, ensure_ascii=False)
+            json.dump(merged, f, indent=2, ensure_ascii=False)
+        self._data = merged
+        self._dirty.clear()
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)
 
     def set(self, key: str, value: Any):
         self._data[key] = value
+        self._dirty.add(key)
         self.save()
 
     def update(self, d: Dict[str, Any]):
         self._data.update(d)
+        self._dirty.update(d.keys())
         self.save()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -176,8 +210,8 @@ class ConfigManager:
 
     def import_from_file(self, filepath: str):
         with open(filepath, "r", encoding="utf-8") as f:
-            self._data.update(json.load(f))
-        self.save()
+            incoming = json.load(f)
+        self.update(incoming)
 
     def get_prompt_path(self, key: str) -> str:
         path = self._data.get(key, DEFAULT_SETTINGS.get(key, ""))
@@ -192,8 +226,7 @@ class ConfigManager:
         return self._data.get("first_run", True)
 
     def mark_first_run_done(self):
-        self._data["first_run"] = False
-        self.save()
+        self.set("first_run", False)
 
     def load_prompt(self, key: str) -> str:
         path = self.get_prompt_path(key)

@@ -1,0 +1,396 @@
+{
+ "ops:world-patent-data": {
+  "@xmlns": {
+   "ops": "http://ops.epo.org",
+   "$": "http://www.epo.org/exchange",
+   "xlink": "http://www.w3.org/1999/xlink"
+  },
+  "ops:biblio-search": {
+   "@total-result-count": "1",
+   "@publications-count": "1",
+   "ops:query": {
+    "$": "ti = \"photoplethysmography blood pressure\" or ab = \"photoplethysmography blood pressure\"",
+    "@syntax": "CQL"
+   },
+   "ops:range": {
+    "@begin": "1",
+    "@end": "10"
+   },
+   "ops:search-result": {
+    "exchange-documents": {
+     "exchange-document": {
+      "@system": "ops.epo.org",
+      "@family-id": "86492176",
+      "@country": "CN",
+      "@doc-number": "115911174",
+      "@kind": "A",
+      "bibliographic-data": {
+       "publication-reference": {
+        "document-id": [
+         {
+          "@document-id-type": "docdb",
+          "country": {
+           "$": "CN"
+          },
+          "doc-number": {
+           "$": "115911174"
+          },
+          "kind": {
+           "$": "A"
+          },
+          "date": {
+           "$": "20230404"
+          }
+         },
+         {
+          "@document-id-type": "epodoc",
+          "doc-number": {
+           "$": "CN115911174"
+          },
+          "date": {
+           "$": "20230404"
+          }
+         }
+        ]
+       },
+       "classifications-ipcr": {
+        "classification-ipcr": [
+         {
+          "@sequence": "1",
+          "text": {
+           "$": "A61B   5/   021            A I"
+          }
+         },
+         {
+          "@sequence": "2",
+          "text": {
+           "$": "H01L  31/   173            A I"
+          }
+         },
+         {
+          "@sequence": "3",
+          "text": {
+           "$": "H01L  33/    10            A I"
+          }
+         }
+        ]
+       },
+       "patent-classifications": {},
+       "application-reference": {
+        "@doc-id": "590049896",
+        "document-id": [
+         {
+          "@document-id-type": "docdb",
+          "country": {
+           "$": "CN"
+          },
+          "doc-number": {
+           "$": "202211057384"
+          },
+          "kind": {
+           "$": "A"
+          }
+         },
+         {
+          "@document-id-type": "epodoc",
+          "doc-number": {
+           "$": "CN20221157384"
+          },
+          "date": {
+           "$": "20220831"
+          }
+         },
+         {
+          "@document-id-type": "original",
+          "doc-number": {
+           "$": "202211057384.1"
+          }
+         }
+        ]
+       },
+       "priority-claims": {
+        "priority-claim": {
+         "@sequence": "1",
+         "@kind": "national",
+         "document-id": {
+          "@document-id-type": "epodoc",
+          "doc-number": {
+           "$": "CN20221157384"
+          },
+          "date": {
+           "$": "20220831"
+          }
+         }
+        }
+       },
+       "parties": {
+        "applicants": {
+         "applicant": [
+          {
+           "@sequence": "1",
+           "@data-format": "epodoc",
+           "applicant-name": {
+            "name": {
+             "$": "UNIV BEIJING TECHNOLOGY"
+            }
+           }
+          },
+          {
+           "@sequence": "1",
+           "@data-format": "original",
+           "applicant-name": {
+            "name": {
+             "$": "北京工业大学"
+            }
+           }
+          }
+         ]
+        },
+        "inventors": {
+         "inventor": [
+          {
+           "@sequence": "1",
+           "@data-format": "epodoc",
+           "inventor-name": {
+            "name": {
+             "$": "LI JIANJUN"
+            }
+           }
+          },
+          {
+           "@sequence": "2",
+           "@data-format": "epodoc",
+           "inventor-name": {
+            "name": {
+             "$": "FU CONGLE"
+            }
+           }
+          },
+          {
+           "@sequence": "1",
+           "@data-format": "original",
+           "inventor-name": {
+            "name": {
+             "$": "李建军"
+            }
+           }
+          },
+          {
+           "@sequence": "2",
+           "@data-format": "original",
+           "inventor-name": {
+            "name": {
+             "$": "付聪乐"
+            }
+           }
+          }
+         ]
+        }
+       },
+       "invention-title": [
+        {
+         "$": "Photoelectric integrated sensing chip for photoplethysmography blood pressure measurement",
+         "@lang": "en"
+        },
+        {
+         "$": "一种面向光电容积脉搏波血压测量的光电集成传感芯片",
+         "@lang": "ol"
+        }
+       ],
+       "references-cited": {
+        "citation": [
+         {
+          "@cited-phase": "national-search-report",
+          "@cited-by": "examiner",
+          "@sequence": "1",
+          "patcit": {
+           "@dnum-type": "publication number",
+           "@num": "1",
+           "document-id": [
+            {
+             "@document-id-type": "epodoc",
+             "doc-number": {
+              "$": "US2003109791"
+             },
+             "date": {
+              "$": "20030612"
+             }
+            },
+            {
+             "@document-id-type": "docdb",
+             "country": {
+              "$": "US"
+             },
+             "doc-number": {
+              "$": "2003109791"
+             },
+             "kind": {
+              "$": "A1"
+             },
+             "date": {
+              "$": "20030612"
+             }
+            }
+           ]
+          },
+          "category": {
+           "$": "A"
+          },
+          "rel-claims": {
+           "$": "1-6"
+          },
+          "rel-passage": {
+           "passage": {
+            "$": "* 全文 *"
+           }
+          }
+         },
+         {
+          "@cited-phase": "national-search-report",
+          "@cited-by": "examiner",
+          "@sequence": "2",
+          "patcit": {
+           "@dnum-type": "publication number",
+           "@num": "2",
+           "document-id": [
+            {
+             "@document-id-type": "epodoc",
+             "doc-number": {
+              "$": "CN207753031"
+             },
+             "date": {
+              "$": "20180821"
+             }
+            },
+            {
+             "@document-id-type": "docdb",
+             "country": {
+              "$": "CN"
+             },
+             "doc-number": {
+              "$": "207753031"
+             },
+             "kind": {
+              "$": "U"
+             },
+             "date": {
+              "$": "20180821"
+             }
+            }
+           ]
+          },
+          "category": {
+           "$": "Y"
+          },
+          "rel-claims": {
+           "$": "1-6"
+          },
+          "rel-passage": {
+           "passage": {
+            "$": "* 说明书第【0003】-【0040】段，图1-2 *"
+           }
+          }
+         },
+         {
+          "@cited-phase": "national-search-report",
+          "@cited-by": "examiner",
+          "@sequence": "3",
+          "patcit": {
+           "@dnum-type": "publication number",
+           "@num": "3",
+           "document-id": [
+            {
+             "@document-id-type": "epodoc",
+             "doc-number": {
+              "$": "CN110534589"
+             },
+             "date": {
+              "$": "20191203"
+             }
+            },
+            {
+             "@document-id-type": "docdb",
+             "country": {
+              "$": "CN"
+             },
+             "doc-number": {
+              "$": "110534589"
+             },
+             "kind": {
+              "$": "A"
+             },
+             "date": {
+              "$": "20191203"
+             }
+            }
+           ]
+          },
+          "category": {
+           "$": "Y"
+          },
+          "rel-claims": {
+           "$": "1-6"
+          },
+          "rel-passage": {
+           "passage": {
+            "$": "* 明书第【0003】-【0028】段，图1-2 *"
+           }
+          }
+         },
+         {
+          "@cited-phase": "national-search-report",
+          "@cited-by": "examiner",
+          "@sequence": "4",
+          "nplcit": {
+           "@num": "1",
+           "text": {
+            "$": "- 聂瑞芬 等: \"RCLED的制作工艺与性能研究\", 固体电子学研究与进展, vol. 30, no. 04, 31 December 2010 (2010-12-31)"
+           }
+          },
+          "category": {
+           "$": "A"
+          },
+          "rel-claims": {
+           "$": "1-6"
+          }
+         },
+         {
+          "@cited-phase": "national-search-report",
+          "@cited-by": "examiner",
+          "@sequence": "5",
+          "nplcit": {
+           "@num": "2",
+           "text": {
+            "$": "- JIANJUN LI 等: \"Integrated sensor chip of a resonant cavity light emitter and photon detector for wearable optical medicine\", OPTICS EXPRESS, vol. 32, no. 23, 1 November 2024 (2024-11-01)"
+           }
+          },
+          "category": {
+           "$": "T"
+          },
+          "rel-claims": {
+           "$": "1-6"
+          }
+         }
+        ]
+       }
+      },
+      "abstract": [
+       {
+        "@lang": "en",
+        "p": {
+         "$": "A photoelectric integrated sensing chip for photoelectric volume pulse wave blood pressure measurement comprises four light emitting areas, a light detection area, a contact electrode of the light emitting areas, a contact electrode of the light detection area, a pressure welding electrode of the light emitting areas and a pressure welding electrode of the light detection area from the top view of the chip. And the isolating layer is used for isolating the four relatively independent light emitting regions from the light detection region. According to the photoelectric volume pulse wave sensor, a light emitting area and a light detection area of the photoelectric volume pulse wave sensor are integrated on one chip, so that the module is small in size and convenient to integrate; the light emitting region and the detection region have the same resonant cavity and active region, so that the wavelength selectivity is good, and the anti-interference capability of the device is improved; because the chip adopts the resonant cavity structure, the light emitting brightness of the light emitting region is high, the efficiency of the light detection region is high, the driving current required by the whole device is small, the power consumption is low, and the chip can be conveniently applied to wearable medical equipment."
+        }
+       },
+       {
+        "@lang": "ol",
+        "p": {
+         "$": "一种面向光电容积脉搏波血压测量的光电集成传感芯片，从芯片的顶视图看，包括四个光发射区，光探测区,光发射区的接触电极,光探测区的接触电极,光发射区的压焊电极，光探测区的压焊电极，将四个相对独立光发射区以及光探测区之间相互隔离的隔离层。本发明是将光电容积脉搏波传感器的光发射区和光探测区集成在一块芯片上，模块体积小，便于集成化；光发射区和探测区具有相同的谐振腔和有源区，对波长的选择性好，提高了器件的抗干扰能力；由于芯片采用了共振腔结构，光发射区的发光亮度高，光探测区的效率高，整个器件所需驱动电流小，功耗低，便于应用于可穿戴式医疗设备中。"
+        }
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}

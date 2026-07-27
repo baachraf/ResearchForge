@@ -1,3 +1,4 @@
+import re
 import time
 import requests
 from typing import List, Dict, Any, Optional
@@ -12,17 +13,54 @@ class EpoOpsSource(DocumentSource):
 
     Coverage asymmetry to be aware of: bibliographic data is worldwide, but OPS
     full text (and therefore claims) is mainly EP and WO documents. Non-EP/WO hits
-    come back as metadata only, which is expected, not an error.
+    come back as metadata only, which is expected, not an error. Measured live
+    2026-07-27 over 20 mixed hits: claims returned for WO/EP/GB (10/20), 404 for
+    US/CN/KR/MA (10/20).
     """
 
     AUTH_URL = "https://ops.epo.org/3.2/auth/accesstoken"
     SEARCH_URL = "https://ops.epo.org/3.2/rest-services/published-data/search/biblio"
     CLAIMS_URL = "https://ops.epo.org/3.2/rest-services/published-data/publication/docdb/{num}/claims"
 
+    # search() spends one claims call per hit, so a 20-hit search is 21 calls.
+    # OPS advertises its remaining per-minute budget in X-Throttling-Control and
+    # tightens it when busy — the search bucket was seen dropping to 5/min under
+    # load on 2026-07-27. Space calls out and back off rather than melting it.
+    _MIN_INTERVAL = 0.4
+
     def __init__(self, credentials: Dict[str, Any] = None):
         super().__init__(credentials)
         self._token = ""
         self._token_expiry = 0.0
+        self._last_call = 0.0
+
+    def _request(self, url: str, headers: Dict[str, str], params: dict = None,
+                 retries: int = 2):
+        """GET with pacing and one backoff on a throttle rejection.
+
+        OPS signals throttling with 403 + X-Rejection-Reason, not only 429. Both
+        are retried; every other status (including 404, which is ordinary missing
+        full text) is handed straight back to the caller.
+        """
+        for attempt in range(retries):
+            gap = time.time() - self._last_call
+            if gap < self._MIN_INTERVAL:
+                time.sleep(self._MIN_INTERVAL - gap)
+            resp = requests.get(url, params=params, headers=headers, timeout=30)
+            self._last_call = time.time()
+
+            if resp.status_code not in (403, 429):
+                return resp
+            reason = resp.headers.get("X-Rejection-Reason", "")
+            if resp.status_code == 403 and not reason:
+                return resp  # a real authorisation failure, not throttling
+            if attempt == retries - 1:
+                print(f"EPO OPS throttled ({resp.status_code} {reason}) — giving up on {url}")
+                return resp
+            wait = float(resp.headers.get("Retry-After", 0) or 0) or 2.0 * (attempt + 1)
+            print(f"EPO OPS throttled ({reason or resp.status_code}); retrying in {wait:.0f}s")
+            time.sleep(wait)
+        return resp
 
     def _get_token(self) -> str:
         key = self.credentials.get("consumer_key", "")
@@ -54,8 +92,9 @@ class EpoOpsSource(DocumentSource):
         if not token:
             return []
 
-        terms = query.replace("+", " ").strip()
-        cql = f'ti="{terms}" or ab="{terms}"'
+        cql = self._build_cql(query)
+        if not cql:
+            return []
         if after_date and after_date[:4].isdigit():
             cql = f'({cql}) and pd within "{after_date[:4]}-{time.strftime("%Y")}"'
 
@@ -64,7 +103,7 @@ class EpoOpsSource(DocumentSource):
 
         results: List[Dict[str, Any]] = []
         try:
-            resp = requests.get(self.SEARCH_URL, params=params, headers=headers, timeout=30)
+            resp = self._request(self.SEARCH_URL, headers, params=params)
             resp.raise_for_status()
             docs = self._extract_documents(resp.json())
             for doc in docs[:max_results]:
@@ -74,11 +113,34 @@ class EpoOpsSource(DocumentSource):
                 num = parsed["patent_meta"]["publication_number"]
                 claims = self._fetch_claims(num, headers)
                 parsed["patent_meta"]["claims_text"] = claims
-                parsed["patent_meta"]["independent_claims"] = ""
+                parsed["patent_meta"]["independent_claims"] = self._independent_claims(claims)
                 results.append(parsed)
         except Exception as e:
             print(f"Error checking EPO OPS: {e}")
         return results
+
+    @staticmethod
+    def _build_cql(query: str) -> str:
+        """Build a CQL query against the `ta` (title-or-abstract) index.
+
+        Quoting matters enormously here. `ta="a b c"` is an exact-PHRASE search:
+        verified live 2026-07-27, `ti="photoplethysmography blood pressure" or
+        ab="..."` returned **1** hit where the unquoted form returned **925**.
+        Multi-word queries are therefore passed unquoted so OPS ANDs the terms,
+        unless the caller deliberately wrapped the whole query in double quotes,
+        which is honoured as an explicit phrase search.
+
+        `ta=` is exactly the `ti= or ab=` union (both forms returned 925) at half
+        the query length.
+        """
+        terms = query.replace("+", " ").strip()
+        explicit_phrase = len(terms) > 1 and terms[0] == '"' and terms[-1] == '"'
+        # Strip quotes either way — an unbalanced one is a CQL syntax error.
+        terms = terms.replace('"', " ").strip()
+        terms = " ".join(terms.split())
+        if not terms:
+            return ""
+        return f'ta="{terms}"' if explicit_phrase else f"ta={terms}"
 
     # -- OPS JSON is deeply nested and inconsistently list-vs-dict; normalise defensively --
 
@@ -97,6 +159,69 @@ class EpoOpsSource(DocumentSource):
         except Exception:
             return []
 
+    @classmethod
+    def _pick_lang(cls, nodes: list, body_key: str = None, prefer: str = "en") -> str:
+        """Pick the preferred-language variant out of a repeated OPS field.
+
+        OPS repeats `invention-title` and `abstract` once per language. Joining
+        them yields an English paragraph followed by its Chinese/German original,
+        which then goes to the LLM as one blob. Take one language instead.
+        """
+        best, first = "", ""
+        for n in nodes:
+            if not isinstance(n, dict):
+                continue
+            if body_key:
+                text = " ".join(
+                    p["$"] for p in cls._as_list(n.get(body_key))
+                    if isinstance(p, dict) and p.get("$")
+                ).strip()
+            else:
+                text = (n.get("$") or "").strip()
+            if not text:
+                continue
+            if not first:
+                first = text
+            if (n.get("@lang") or "").lower() == prefer:
+                best = text
+                break
+        return best or first
+
+    @classmethod
+    def _extract_cpc(cls, biblio: dict) -> list:
+        """Assemble CPC symbols from `patent-classifications`.
+
+        There is no `classifications-cpc` node in the live biblio payload
+        (verified 2026-07-27 — 0 of 10 documents had one), so the previous
+        lookup silently produced an empty list on every hit. CPC arrives split
+        into section/class/subclass/main-group/subgroup components under
+        `patent-classifications.patent-classification[]`, alongside IPC entries
+        that are excluded here by scheme. `A` + `61` + `B` + `5` + `1102`
+        reassembles as `A61B5/1102`.
+        """
+        out = []
+        for c in cls._as_list((biblio.get("patent-classifications") or {}).get("patent-classification")):
+            if not isinstance(c, dict):
+                continue
+            scheme = ((c.get("classification-scheme") or {}).get("@scheme") or "")
+            if not scheme.upper().startswith("CPC"):
+                continue
+
+            def part(key):
+                v = c.get(key)
+                return (v.get("$") or "").strip() if isinstance(v, dict) else ""
+
+            sec, cls_, sub = part("section"), part("class"), part("subclass")
+            main, subg = part("main-group"), part("subgroup")
+            if not (sec and cls_ and sub and main):
+                continue
+            sym = f"{sec}{cls_}{sub}{main}"
+            if subg:
+                sym += f"/{subg}"
+            if sym not in out:
+                out.append(sym)
+        return out
+
     def _parse_document(self, node: dict) -> Optional[Dict[str, Any]]:
         try:
             doc = self._as_list(node.get("exchange-document"))
@@ -112,12 +237,10 @@ class EpoOpsSource(DocumentSource):
 
             biblio = doc.get("bibliographic-data", {}) or {}
 
-            title = ""
-            for t in self._as_list(biblio.get("invention-title")):
-                if isinstance(t, dict) and t.get("$"):
-                    title = t["$"]
-                    if t.get("@lang") == "en":
-                        break
+            # Titles and abstracts are repeated per language ("en" plus the
+            # original, e.g. "ol" for a CN filing). Prefer English; fall back to
+            # the first available rather than concatenating languages together.
+            title = self._pick_lang(self._as_list(biblio.get("invention-title")))
             if not title:
                 return None
 
@@ -136,31 +259,35 @@ class EpoOpsSource(DocumentSource):
                     inventors.append(name["$"])
             inventors = list(dict.fromkeys(inventors))
 
-            date = ""
+            pub_date = ""
             for d in self._as_list(biblio.get("publication-reference", {}).get("document-id")):
                 if isinstance(d, dict) and isinstance(d.get("date"), dict):
-                    date = d["date"].get("$", "")
-                    if date:
+                    pub_date = d["date"].get("$", "")
+                    if pub_date:
                         break
 
-            abstract = ""
-            for ab in self._as_list(doc.get("abstract")):
-                for p in self._as_list((ab or {}).get("p")):
-                    if isinstance(p, dict) and p.get("$"):
-                        abstract += p["$"] + " "
-            abstract = abstract.strip()
+            # The earliest priority claim — the date that actually matters when
+            # dating prior art. Falls back to the publication date when the
+            # document declares no priority claim.
+            prio_dates = []
+            for pc in self._as_list(biblio.get("priority-claims", {}).get("priority-claim")):
+                for d in self._as_list((pc or {}).get("document-id")):
+                    if isinstance(d, dict) and isinstance(d.get("date"), dict):
+                        v = d["date"].get("$", "")
+                        if v:
+                            prio_dates.append(v)
+            priority_date = min(prio_dates) if prio_dates else pub_date
 
-            cpc = []
-            for c in self._as_list(biblio.get("classifications-cpc", {}).get("classification-cpc")):
-                if isinstance(c, dict) and c.get("text", {}).get("$"):
-                    cpc.append(c["text"]["$"])
+            abstract = self._pick_lang(self._as_list(doc.get("abstract")), body_key="p")
+
+            cpc = self._extract_cpc(biblio)
 
             return {
                 "id": pub,
                 "title": title,
                 "url": f"https://worldwide.espacenet.com/patent/search?q={pub}",
                 "source": "EPO OPS",
-                "year": int(date[:4]) if date[:4].isdigit() else None,
+                "year": int(pub_date[:4]) if pub_date[:4].isdigit() else None,
                 "abstract": abstract,
                 "authors": inventors,
                 "doi": "",
@@ -173,33 +300,129 @@ class EpoOpsSource(DocumentSource):
                     "assignees": assignees,
                     "inventors": inventors,
                     "cpc": cpc,
-                    "priority_date": date,
+                    "priority_date": priority_date,
+                    "publication_date": pub_date,
                 },
             }
         except Exception as e:
             print(f"EPO OPS parse error: {e}")
             return None
 
+    # A dependent claim back-references another claim; an independent one does not.
+    _DEPENDENT_RE = re.compile(
+        r"\b(?:as\s+claimed\s+in|according\s+to|as\s+defined\s+in|as\s+set\s+forth\s+in|of|in)\s+"
+        r"(?:any\s+(?:one\s+)?of\s+)?(?:the\s+)?(?:preceding|foregoing|previous)?\s*claims?\b",
+        re.IGNORECASE,
+    )
+
+    # Claims are numbered "1. ", "15. " at the start of a line.
+    _CLAIM_START_RE = re.compile(r"(?m)^[ \t]*(\d{1,3})[ \t]*\.[ \t]+")
+
+    @staticmethod
+    def _strip_running_headers(chunks: list) -> list:
+        """Drop the page running-head from chunked full text.
+
+        US/WO claims arrive as page-sized chunks that each open with the page
+        header (e.g. an attorney docket line). It is spliced into running text
+        rather than isolated on its own line — chunk 3 of WO2026136374A1 reads
+        "Atty. Dkt No. 10085-01-0191-PCT of: eumelanin, ..." — so a
+        repeated-whole-line filter does not see it. It is reliably a common
+        *prefix* of the chunks, which is what this detects, then removes
+        everywhere (the first chunk carries it mid-line too).
+
+        Bounded on both sides: too short and it would be ordinary shared claim
+        wording, too long and it is genuine text.
+        """
+        if len(chunks) < 3:
+            return chunks
+        tail = [c for c in chunks[1:] if c]
+        if len(tail) < 2:
+            return chunks
+        prefix = tail[0]
+        for c in tail[1:]:
+            i = 0
+            while i < len(prefix) and i < len(c) and prefix[i] == c[i]:
+                i += 1
+            prefix = prefix[:i]
+            if not prefix:
+                return chunks
+        prefix = prefix.strip()
+        if not (8 <= len(prefix) <= 120):
+            return chunks
+        return [c.replace(prefix, " ") for c in chunks]
+
+    @classmethod
+    def _split_claims(cls, claims_text: str) -> list:
+        """Split a claims blob into (number, text) pairs.
+
+        Two shapes occur live (verified 2026-07-27). EP publications return one
+        `claim-text` entry per claim, already clean. US/WO publications return a
+        handful of arbitrary page-sized chunks with a running attorney-docket
+        header, claims running across chunk boundaries — so the entry structure
+        carries no claim boundaries at all and only the numbering does.
+
+        A chunk can open with a stray page number that collides with a real claim
+        number, so a repeated number keeps its longest text.
+        """
+        marks = list(cls._CLAIM_START_RE.finditer(claims_text))
+        if not marks:
+            return []
+        best = {}
+        for i, m in enumerate(marks):
+            end = marks[i + 1].start() if i + 1 < len(marks) else len(claims_text)
+            num = int(m.group(1))
+            body = claims_text[m.end():end].strip()
+            if len(body) > len(best.get(num, "")):
+                best[num] = body
+        return [(n, best[n]) for n in sorted(best)]
+
+    @classmethod
+    def _independent_claims(cls, claims_text: str) -> str:
+        """The independent claims define the actual scope; the prompt asks for them.
+
+        Heuristic and English-only — a claim that back-references another claim is
+        dependent. If nothing survives (non-English text, unusual phrasing), return
+        empty rather than guessing, so the prompt's CLAIMS NOT AVAILABLE path holds.
+        """
+        if not claims_text:
+            return ""
+        claims = cls._split_claims(claims_text)
+        if not claims:
+            return ""
+        keep = [f"{n}. {body}" for n, body in claims if not cls._DEPENDENT_RE.search(body)]
+        return "\n\n".join(keep)
+
     def _fetch_claims(self, pub_number: str, headers: Dict[str, str]) -> str:
         """Full text is EP/WO-mostly. A miss is normal coverage, not a failure."""
         try:
-            resp = requests.get(self.CLAIMS_URL.format(num=pub_number), headers=headers, timeout=25)
+            resp = self._request(self.CLAIMS_URL.format(num=pub_number), headers)
             if resp.status_code == 404:
-                return ""
+                return ""  # ordinary missing full text (US/CN/KR/…), not a failure
             resp.raise_for_status()
             world = resp.json().get("ops:world-patent-data", {})
             fulltext = world.get("ftxt:fulltext-documents", {})
             docs = self._as_list(fulltext.get("ftxt:fulltext-document"))
-            out = []
+
+            # An EP-B1 publishes its claims in EN, DE and FR. Concatenating every
+            # block would triple the claim set in three languages; keep one.
+            blocks = []
             for d in docs:
                 for c in self._as_list((d or {}).get("claims")):
-                    for p in self._as_list((c or {}).get("claim")):
+                    if not isinstance(c, dict):
+                        continue
+                    texts = []
+                    for p in self._as_list(c.get("claim")):
                         for t in self._as_list((p or {}).get("claim-text")):
                             if isinstance(t, dict) and t.get("$"):
-                                out.append(t["$"])
+                                texts.append(t["$"])
                             elif isinstance(t, str):
-                                out.append(t)
-            return "\n\n".join(out)
+                                texts.append(t)
+                    if texts:
+                        blocks.append(((c.get("@lang") or "").upper(), texts))
+            if not blocks:
+                return ""
+            chosen = next((t for lang, t in blocks if lang == "EN"), blocks[0][1])
+            return "\n\n".join(self._strip_running_headers(chosen))
         except Exception as e:
             print(f"EPO OPS claims unavailable for {pub_number}: {e}")
             return ""

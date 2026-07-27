@@ -314,5 +314,50 @@ class TestIssue4MCPWrapper(_IsolatedCase):
         self.assertIn("abstract", out["results"][0])
 
 
+class TestConcurrentSettingsWrite(_IsolatedCase):
+    """settings.json is shared by the GUI and one `--mcp` server per registered
+    client, all long-lived. A save must not write back a snapshot taken at
+    startup, or the last process to touch any setting erases every key the
+    others saved in the meantime.
+
+    Observed live 2026-07-27: EPO OPS credentials written to the file vanished
+    between two runs while six `ResearchForge.exe --mcp` servers were resident.
+    """
+
+    def test_save_does_not_clobber_another_processs_key(self):
+        path = os.path.join(self.app_data, "shared_settings.json")
+        stale = ConfigManager(config_path=path)      # long-lived process
+        stale.set("llm_model", "model-a")
+
+        other = ConfigManager(config_path=path)      # e.g. the GUI's Set Keys dialog
+        other.set("epo_ops_key", "SECRET-KEY")
+
+        stale.set("llm_model", "model-b")            # any unrelated setting
+
+        import json as _json
+        with open(path, encoding="utf-8") as f:
+            on_disk = _json.load(f)
+        self.assertEqual(on_disk["epo_ops_key"], "SECRET-KEY",
+                         "a stale process erased a key written by another process")
+        self.assertEqual(on_disk["llm_model"], "model-b")
+
+    def test_own_edits_still_win_over_disk(self):
+        path = os.path.join(self.app_data, "own_edit.json")
+        a = ConfigManager(config_path=path)
+        a.set("llm_model", "old")
+        b = ConfigManager(config_path=path)
+        b.set("llm_model", "new")
+        self.assertEqual(ConfigManager(config_path=path).get("llm_model"), "new")
+
+    def test_saver_picks_up_concurrent_values_in_memory(self):
+        path = os.path.join(self.app_data, "pickup.json")
+        a = ConfigManager(config_path=path)
+        a.set("llm_model", "m")
+        b = ConfigManager(config_path=path)
+        b.set("epo_ops_secret", "S")
+        a.set("llm_model", "m2")
+        self.assertEqual(a.get("epo_ops_secret"), "S")
+
+
 if __name__ == "__main__":
     unittest.main()

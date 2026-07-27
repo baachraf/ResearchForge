@@ -160,6 +160,180 @@ class TestEpoOpsAdapter:
         assert s._as_list([1, 2]) == [1, 2]
 
 
+def _fixture(name):
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", name)
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
+
+
+class TestEpoOpsAgainstLivePayloads:
+    """Parsing regressions, pinned to payloads captured from the live API
+    on 2026-07-27. Every assertion here failed against the from-documentation
+    adapter and returned empty rather than raising."""
+
+    def _src(self):
+        return EpoOpsSource(credentials={"consumer_key": "k", "consumer_secret": "s"})
+
+    # -- CQL: quoting turns the search into an exact-phrase match --
+
+    def test_multiword_query_is_not_phrase_quoted(self):
+        """Live: the quoted form returned 1 hit where unquoted returned 925."""
+        cql = self._src()._build_cql("photoplethysmography blood pressure")
+        assert '"' not in cql
+        assert cql == "ta=photoplethysmography blood pressure"
+
+    def test_caller_can_still_force_a_phrase_search(self):
+        assert self._src()._build_cql('"blood pressure"') == 'ta="blood pressure"'
+
+    def test_stray_quotes_do_not_produce_invalid_cql(self):
+        cql = self._src()._build_cql('rppg "signal')
+        assert cql.count('"') in (0, 2)
+
+    def test_empty_query_makes_no_request(self):
+        with patch("requests.post") as p, patch("requests.get") as g:
+            assert self._src().search("   ") == []
+            g.assert_not_called()
+
+    # -- Envelope shapes: one result is a dict, several are a list --
+
+    def test_single_result_envelope_is_parsed(self):
+        docs = self._src()._extract_documents(_fixture("epo_search_single_cn.json"))
+        assert len(docs) == 1
+        parsed = self._src()._parse_document(docs[0])
+        assert parsed["id"] == "CN115911174A"
+
+    def test_multi_result_envelope_is_parsed(self):
+        src = self._src()
+        docs = src._extract_documents(_fixture("epo_search_multi.json"))
+        assert len(docs) == 2
+        assert all(src._parse_document(d) for d in docs)
+
+    # -- Language: OPS repeats title/abstract per language --
+
+    def test_english_title_and_abstract_chosen_not_concatenated(self):
+        docs = self._src()._extract_documents(_fixture("epo_search_single_cn.json"))
+        p = self._src()._parse_document(docs[0])
+        assert p["title"].startswith("Photoelectric integrated sensing chip")
+        # The CN original must not be glued onto the English text.
+        assert not any(ord(ch) > 0x2000 for ch in p["title"] + p["abstract"])
+
+    # -- CPC lives under patent-classifications, not classifications-cpc --
+
+    def test_cpc_is_extracted_from_patent_classifications(self):
+        src = self._src()
+        docs = src._extract_documents(_fixture("epo_search_multi.json"))
+        cpc = src._parse_document(docs[0])["patent_meta"]["cpc"]
+        assert cpc, "CPC came back empty — the classification path has drifted again"
+        # Reassembled from section/class/subclass/main-group/subgroup components.
+        assert "A61B5/1102" in cpc
+        assert "A47C31/123" in cpc
+
+    def test_ipc_codes_are_not_mixed_into_cpc(self):
+        src = self._src()
+        docs = src._extract_documents(_fixture("epo_search_multi.json"))
+        for c in src._parse_document(docs[0])["patent_meta"]["cpc"]:
+            assert "/" in c and " " not in c
+
+    # -- Dates: priority date is not the publication date --
+
+    def test_priority_date_is_the_priority_claim_not_publication(self):
+        src = self._src()
+        docs = src._extract_documents(_fixture("epo_search_single_cn.json"))
+        meta = src._parse_document(docs[0])["patent_meta"]
+        assert meta["publication_date"] == "20230404"
+        assert meta["priority_date"] == "20220831"
+
+    # -- Claims: two different live shapes --
+
+    def test_ep_claims_one_entry_per_claim(self):
+        src = self._src()
+        with patch("requests.get", return_value=_mock_resp(_fixture("epo_claims_ep.json"))):
+            text = src._fetch_claims("EP1000000A1", {})
+        assert len(src._split_claims(text)) == 11
+        assert src._independent_claims(text).startswith("1. Apparatus for manufacturing")
+
+    def test_wo_claims_are_page_chunks_split_by_number(self):
+        """US/WO return a few page-sized chunks, not one entry per claim, so
+        claim boundaries come only from the numbering."""
+        src = self._src()
+        with patch("requests.get", return_value=_mock_resp(_fixture("epo_claims_wo.json"))):
+            text = src._fetch_claims("WO2026136374A1", {})
+        claims = src._split_claims(text)
+        assert len(claims) > 50
+        assert claims[0][0] == 1
+        assert claims[0][1].startswith("A method for enhancing specificity")
+
+    def test_running_page_header_is_stripped(self):
+        src = self._src()
+        with patch("requests.get", return_value=_mock_resp(_fixture("epo_claims_wo.json"))):
+            text = src._fetch_claims("WO2026136374A1", {})
+        assert "Atty. Dkt No. 10085-01-0191-PCT" not in text
+
+    def test_independent_claims_are_a_subset_not_everything(self):
+        src = self._src()
+        with patch("requests.get", return_value=_mock_resp(_fixture("epo_claims_wo.json"))):
+            text = src._fetch_claims("WO2026136374A1", {})
+        indep = src._independent_claims(text)
+        assert indep
+        assert len(indep) < len(text) / 2
+        assert "according to claim" not in indep.lower()
+
+    def test_claims_language_blocks_are_not_concatenated(self):
+        """An EP-B1 publishes EN/DE/FR; only one must be kept."""
+        payload = _fixture("epo_claims_ep.json")
+        doc = payload["ops:world-patent-data"]["ftxt:fulltext-documents"]["ftxt:fulltext-document"]
+        en = doc["claims"]
+        de = {"@lang": "DE", "claim": {"claim-text": [{"$": "1. Vorrichtung zur Herstellung."}]}}
+        doc["claims"] = [en, de]
+        with patch("requests.get", return_value=_mock_resp(payload)):
+            text = self._src()._fetch_claims("EP1000000A1", {})
+        assert "Vorrichtung" not in text
+        assert "Apparatus for manufacturing" in text
+
+    def test_missing_claims_yield_empty_not_exception(self):
+        with patch("requests.get", return_value=_mock_resp({}, status=404)):
+            assert self._src()._fetch_claims("US123A1", {}) == ""
+
+    # -- Throttling: OPS rejects with 403 + X-Rejection-Reason, not only 429 --
+
+    def test_throttle_rejection_is_retried(self):
+        src = self._src()
+        src._MIN_INTERVAL = 0
+        throttled = _mock_resp({}, status=403, headers={"X-Rejection-Reason": "IndividualQuotaPerHour"})
+        ok = _mock_resp(_fixture("epo_claims_ep.json"))
+        with patch("requests.get", side_effect=[throttled, ok]), patch("time.sleep"):
+            text = src._fetch_claims("EP1000000A1", {})
+        assert "Apparatus for manufacturing" in text
+
+    def test_plain_403_is_not_retried_as_throttling(self):
+        """A 403 with no rejection reason is an authorisation failure; retrying
+        it just burns quota."""
+        src = self._src()
+        src._MIN_INTERVAL = 0
+        denied = _mock_resp({}, status=403, headers={})
+        with patch("requests.get", side_effect=[denied]) as g, patch("time.sleep"):
+            assert src._fetch_claims("EP1000000A1", {}) == ""
+            assert g.call_count == 1
+
+    def test_calls_are_paced(self):
+        src = self._src()
+        src._MIN_INTERVAL = 5.0
+        with patch("requests.get", return_value=_mock_resp({}, status=404)), \
+             patch("time.sleep") as slp:
+            src._fetch_claims("EP1A", {})
+            src._fetch_claims("EP2A", {})
+        assert slp.called, "second call must wait out the minimum interval"
+
+
+def _mock_resp(payload, status=200, headers=None):
+    m = MagicMock()
+    m.json.return_value = payload
+    m.status_code = status
+    m.headers = headers if headers is not None else {}
+    m.raise_for_status.side_effect = None if status == 200 else Exception(str(status))
+    return m
+
+
 class TestPromptFillSafety:
     """The patent prompts contain literal {...} citation examples. str.format()
     would raise KeyError on them; the fill helper must not."""
