@@ -1016,6 +1016,7 @@ def generate_patent_landscape(
     session_id: str = "",
     prompt_key: str = "patent_landscape_prompt",
     per_patent_prompt_key: str = "per_patent_prompt",
+    on_progress=None,
 ) -> dict:
     """Analyse every patent in a session, then synthesise ``PATENT_LANDSCAPE.md``.
 
@@ -1045,24 +1046,44 @@ def generate_patent_landscape(
     cache_dir = paths.patent_cache_dir(model_root)
     os.makedirs(cache_dir, exist_ok=True)
 
+    # `done` is the number of patents COMPLETED, so per-patent reports (0..N-1)
+    # never collide with the final synthesis report (done == N). The label names
+    # the patent currently being worked on.
+    def _report(done, label):
+        if on_progress:
+            try:
+                on_progress(done, len(patents), label)
+            except Exception:
+                pass
+
     analyses, failed, no_claims = [], [], 0
-    for p in patents:
+    for idx, p in enumerate(patents):
         meta = p.get("patent_meta", {}) or {}
         pub = meta.get("publication_number") or p.get("id") or ""
         safe = re.sub(r'[\/*?:"<>|]', "_", str(pub)) or "unknown"
         cache_path = os.path.join(cache_dir, f"{safe}.md")
 
+        # Read from the record, not from the analysis call, so the tally is the
+        # same on a warm cache. This used to be derived from analyze_patent's
+        # return value AFTER the cache `continue` below, so a re-run counted 0
+        # metadata-only patents and the header silently dropped the disclosure.
+        metadata_only = not (meta.get("claims_text") or "").strip()
+
         if os.path.exists(cache_path):
+            _report(idx, f"{pub} (cached)")
             with open(cache_path, encoding="utf-8") as fh:
                 analyses.append(fh.read())
+            if metadata_only:
+                no_claims += 1
             continue
 
+        _report(idx, pub)
         res = analyze_patent(p, prompt_key=per_patent_prompt_key,
                              context=context, intent=intent)
         if "error" in res:
             failed.append(f"{pub}: {res['error']}")
             continue
-        if not res.get("claims_available"):
+        if metadata_only:
             no_claims += 1
         block = f"### {pub} — {p.get('title','')}\n\n{res['text']}"
         with open(cache_path, "w", encoding="utf-8") as fh:
@@ -1072,6 +1093,7 @@ def generate_patent_landscape(
     if not analyses:
         return {"error": "Every patent analysis failed: " + "; ".join(failed[:3])}
 
+    _report(len(patents), f"synthesising {len(analyses)} analyses")
     full_prompt = _fill(prompt, {
         "patent_analyses": "\n\n---\n\n".join(analyses),
         "context": context,

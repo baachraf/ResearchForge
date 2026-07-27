@@ -1072,6 +1072,7 @@ class _PatentLandscapeWorker(QThread):
     same location. The API layer has no Qt dependency, so this is safe.
     """
     progress = Signal(str)
+    tick = Signal(int, int, str)   # (done, total, label) for the visible bar
     done = Signal(dict)
 
     def __init__(self, session_id: str, force: bool = False, parent=None):
@@ -1083,7 +1084,13 @@ class _PatentLandscapeWorker(QThread):
         try:
             self.progress.emit("Analysing patents...")
             import researchforge_api as rf
-            res = rf.generate_patent_landscape(session_id=self.session_id)
+
+            def _cb(done, total, label):
+                self.tick.emit(done, total, label)
+                self.progress.emit(f"Patent {done}/{total}: {label}")
+
+            res = rf.generate_patent_landscape(
+                session_id=self.session_id, on_progress=_cb)
             self.done.emit(res if isinstance(res, dict) else {"error": "unexpected result"})
         except Exception as e:
             self.done.emit({"error": str(e)})
@@ -1115,25 +1122,52 @@ def _on_patent_landscape(self, force_rerun: bool = False):
             self.log.emit(f"Could not clear patent cache: {e}")
 
     self.btn_patent.setEnabled(False)
+    self.overall_progress.setVisible(True)
+    self.overall_progress.setRange(0, 0)   # busy until the first tick sets a range
+    self.lbl_progress.setText("Analysing patents...")
     self._patent_worker = _PatentLandscapeWorker(session_id, force_rerun, self)
     self._patent_worker.progress.connect(self.log.emit)
+    self._patent_worker.tick.connect(self._on_patent_tick)
     self._patent_worker.done.connect(self._on_patent_landscape_done)
     self._patent_worker.start()
 
 
+def _on_patent_tick(self, done: int, total: int, label: str):
+    # `done` is patents COMPLETED, so `done == total` is only ever the synthesis
+    # step — it can't collide with the last per-patent report (done == total-1).
+    if done >= total:
+        self.overall_progress.setRange(0, 0)   # indeterminate: LLM is synthesising
+        self.lbl_progress.setText(f"⏳ Synthesising landscape from {total} patents...")
+        return
+    self.overall_progress.setRange(0, total)
+    self.overall_progress.setValue(done)
+    self.lbl_progress.setText(f"⏳ Patent {done + 1}/{total}: {label}")
+
+
 def _on_patent_landscape_done(self, res: dict):
     self.btn_patent.setEnabled(True)
+    self.overall_progress.setVisible(False)
     self._patent_worker = None
     if "error" in res:
         self.log.emit(f"Patent landscape failed: {res['error']}")
         QMessageBox.warning(self, "Patent Landscape", res["error"])
         return
-    msg = f"Patent landscape written: {res.get('patents', 0)} patents"
-    if res.get("without_claims"):
-        msg += f" ({res['without_claims']} metadata-only — no claims text)"
-    self.log.emit(msg + " -> " + str(res.get("path", "")))
+    total = res.get("patents", 0)
+    no_claims = res.get("without_claims", 0)
+    self.lbl_progress.setText(f"✓ Patent landscape: {total} patents")
+    msg = f"Patent landscape written: {total} patents."
+    if no_claims:
+        with_claims = total - no_claims
+        msg += (f"\n\n{no_claims} of {total} are metadata-only (no claims text) — "
+                f"these are patents whose office publishes no full text through the "
+                f"API (mostly US/CN/KR/JP). They are described from title + abstract "
+                f"and excluded from the claim-scope map. {with_claims} carry full "
+                f"claims (mainly EP/WO).\n\nThis is expected, not a failure.")
+    self.log.emit(f"Patent landscape written: {total} patents "
+                  f"({no_claims} metadata-only) -> {res.get('path', '')}")
     QMessageBox.information(self, "Patent Landscape", msg)
 
 
 SummarizeTab._on_patent_landscape = _on_patent_landscape
+SummarizeTab._on_patent_tick = _on_patent_tick
 SummarizeTab._on_patent_landscape_done = _on_patent_landscape_done
