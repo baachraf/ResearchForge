@@ -101,5 +101,38 @@ class TestMustContainToggle(unittest.TestCase):
         self.assertFalse(q["must_contain_enabled"])
 
 
+class TestGenerationTogglesMustContain(unittest.TestCase):
+    """The session-creator toggle controls whether GENERATED queries carry
+    must_contain terms — off means the generated query has none."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _dialog(self, default_on):
+        from gui.session_creator import SessionCreatorDialog
+        return SessionCreatorDialog(_Cfg(default_must_contain_enabled=default_on))
+
+    LLM_QUERIES = [
+        {"name": "q1", "query": "rppg morphology", "must_contain": ["rppg", "notch"]},
+        {"name": "q2", "query": "pulse wave", "must_contain": ["pulse"]},
+    ]
+
+    def test_enabled_keeps_llm_must_contain(self):
+        dlg = self._dialog(default_on=True)
+        dlg._on_queries_generated([dict(q) for q in self.LLM_QUERIES])
+        gen = dlg._suggested_queries
+        self.assertEqual(gen[0]["must_contain"], ["rppg", "notch"])
+        self.assertTrue(gen[0]["must_contain_enabled"])
+
+    def test_disabled_strips_must_contain_from_generated_queries(self):
+        dlg = self._dialog(default_on=False)
+        dlg._on_queries_generated([dict(q) for q in self.LLM_QUERIES])
+        gen = dlg._suggested_queries
+        self.assertEqual(gen[0]["must_contain"], [])   # keyword removed
+        self.assertEqual(gen[1]["must_contain"], [])
+        self.assertFalse(gen[0]["must_contain_enabled"])
+
+
 if __name__ == "__main__":
     unittest.main()

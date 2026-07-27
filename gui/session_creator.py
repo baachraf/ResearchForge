@@ -803,13 +803,13 @@ class SessionCreatorDialog(QDialog):
         # Session-level default for the per-query "must contain" title filter.
         # Generated queries inherit this; each can still be toggled afterward in
         # the search query panel (double-click the query).
-        self.chk_must_contain_default = QCheckBox("Filter results by 'must contain' keywords")
+        self.chk_must_contain_default = QCheckBox("Use 'must contain' keywords in generated queries")
         self.chk_must_contain_default.setChecked(
             self.cfg.get("default_must_contain_enabled", True) if self.cfg else True)
         self.chk_must_contain_default.setToolTip(
-            "Default for new queries in this session. When off, searches are not "
-            "gated by must-contain keywords. Per-query overrides live in the "
-            "search query panel.")
+            "When on, generated queries include the must-contain keywords the LLM "
+            "picks. When off, generated queries carry NO must-contain terms. You "
+            "can still add or change them per query in the search panel.")
         self.chk_must_contain_default.toggled.connect(
             lambda on: self.cfg and self.cfg.set("default_must_contain_enabled", bool(on)))
         btns_col.addWidget(self.chk_must_contain_default)
@@ -1647,6 +1647,11 @@ class SessionCreatorDialog(QDialog):
         self._restore_buttons()
 
     def _on_queries_generated(self, queries):
+        # The "use must contain keywords" toggle decides whether the generated
+        # queries carry must_contain terms at all: ON keeps what the LLM produced,
+        # OFF strips them so the queries have no must-contain requirement.
+        use_must_contain = (self.chk_must_contain_default.isChecked()
+                            if hasattr(self, "chk_must_contain_default") else True)
         fixed = []
         for i, q in enumerate(queries):
             if isinstance(q, str):
@@ -1654,6 +1659,9 @@ class SessionCreatorDialog(QDialog):
                      "sources": ["arxiv", "semantic_scholar", "web", "brave", "pubmed"]}
             q.setdefault("must_not", [])
             q.setdefault("must_contain", [])
+            if not use_must_contain:
+                q["must_contain"] = []
+            q["must_contain_enabled"] = use_must_contain
             q.setdefault("name", q.get("query", f"Query {i+1}"))
             fixed.append(q)
         self._suggested_queries = fixed

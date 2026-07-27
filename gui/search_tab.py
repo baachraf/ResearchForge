@@ -158,8 +158,8 @@ class QueryBuilderDialog(QDialog):
         self.must_contain_enabled.setChecked(
             self._cfg.get("default_must_contain_enabled", True) if self._cfg else True)
         self.must_contain_enabled.setToolTip(
-            "When off, results are NOT filtered by these keywords — the terms are "
-            "kept but the title gate is skipped for this query.")
+            "Tick to use these must-contain keywords for this query; untick to "
+            "ignore them (the typed terms are kept so you can turn them back on).")
         hb_must.addWidget(self.must_contain_enabled)
         self.must_contain = QLineEdit()
         self.must_contain.setPlaceholderText("rPPG, heart rate, waveform (comma-separated)")
