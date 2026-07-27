@@ -906,7 +906,10 @@ class SessionCreatorDialog(QDialog):
         self.btn_add_all.clicked.connect(self._add_all_queries)
         ctr.addWidget(self.btn_add_all)
         self.btn_remove_selected = QPushButton("<<")
-        self.btn_remove_selected.setToolTip("Remove selected queries from search list")
+        self.btn_remove_selected.setToolTip(
+            "Remove the highlighted queries from the search list (they go back to "
+            "Suggested). Click a query to select it, then « — or right-click → "
+            "Remove. The checkbox controls inclusion in the search, not removal.")
         self.btn_remove_selected.setMaximumWidth(36)
         self.btn_remove_selected.clicked.connect(self._remove_selected_queries)
         ctr.addWidget(self.btn_remove_selected)
@@ -939,8 +942,11 @@ class SessionCreatorDialog(QDialog):
         self.search_table.setColumnWidth(0, 24)
         self.search_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.search_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.search_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.search_table.setAlternatingRowColors(True)
         self.search_table.itemSelectionChanged.connect(self._show_query_detail)
+        self.search_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.search_table.customContextMenuRequested.connect(self._search_context_menu)
         mid_box.addWidget(self.search_table)
         qh.addWidget(self._mid_panel, 1)
 
@@ -1941,20 +1947,30 @@ class SessionCreatorDialog(QDialog):
             )
 
     def _remove_selected_queries(self):
-        to_remove = []
-        to_keep = []
-        for i, q in enumerate(self._search_queries):
-            item = self.search_table.item(i, 0)
-            if item and item.checkState() == Qt.Checked:
-                to_remove.append(q)
-            else:
-                to_keep.append(q)
-        if not to_remove:
+        # Remove the HIGHLIGHTED rows. The column-0 checkbox here means "include
+        # this query in the search" (it defaults to checked), so it must NOT drive
+        # removal — the old code removed every checked row, i.e. the whole list,
+        # which is why removing a query felt broken. Click a row (or Ctrl/Shift-
+        # click several), then « or right-click → Remove.
+        rows = {idx.row() for idx in self.search_table.selectionModel().selectedRows()}
+        if not rows:
+            QMessageBox.information(
+                self, "Nothing selected",
+                "Click the query (or Ctrl/Shift-click several) you want to remove, "
+                "then click « or right-click → Remove.")
             return
+        to_remove = [q for i, q in enumerate(self._search_queries) if i in rows]
+        to_keep = [q for i, q in enumerate(self._search_queries) if i not in rows]
+        # Return removed queries to the Suggested list so they are recoverable.
         self._suggested_queries.extend(to_remove)
         self._search_queries = to_keep
         self._populate_suggested_table()
         self._populate_search_table()
+
+    def _search_context_menu(self, pos):
+        menu = QMenu()
+        menu.addAction("Remove", self._remove_selected_queries)
+        menu.exec(self.search_table.viewport().mapToGlobal(pos))
 
     def _suggested_context_menu(self, pos):
         menu = QMenu()
