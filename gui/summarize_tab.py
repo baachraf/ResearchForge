@@ -67,7 +67,7 @@ class SummarizeTab(QWidget):
             chk.blockSignals(False)
         saved_mode = self.cfg.get("summ_selected_mode", "per_paper")
         if saved_mode != self._selected_mode:
-            self._select_mode(saved_mode)
+            self._select_mode(saved_mode, persist=False)
         self._refresh_tree()
 
     @staticmethod
@@ -236,6 +236,20 @@ class SummarizeTab(QWidget):
         self.btn_all = QPushButton("All")
         self.btn_all.clicked.connect(lambda: self._select_mode("all"))
         hb_tree_btns.addWidget(self.btn_all)
+
+        # Single source of truth for the mode buttons. _select_mode used to carry
+        # its own hardcoded copy of this list and btn_patent was missing from it,
+        # so clicking Patent Landscape set the mode internally but highlighted
+        # nothing — the button looked unselectable.
+        self._mode_buttons = [
+            (self.btn_per_paper, "per_paper"),
+            (self.btn_topic, "topic"),
+            (self.btn_global, "global"),
+            (self.btn_related, "related_work"),
+            (self.btn_introduction, "introduction"),
+            (self.btn_patent, "patent_landscape"),
+            (self.btn_all, "all"),
+        ]
         self.btn_start_stop = QPushButton("Start")
         self.btn_start_stop.setObjectName("btn_search")
         self.btn_start_stop.clicked.connect(self._on_start_stop)
@@ -265,7 +279,7 @@ class SummarizeTab(QWidget):
         splitter.setStretchFactor(2, 1)
         splitter.setSizes([120, 120, 500])
         layout.addWidget(splitter, 1)
-        self._select_mode("per_paper")
+        self._select_mode("per_paper", persist=False)
 
     def _on_enhance_context(self):
         text = self.our_work.toPlainText().strip()
@@ -995,12 +1009,19 @@ class SummarizeTab(QWidget):
         self._llm_worker.error.connect(self._on_llm_error)
         self._llm_worker.start()
 
-    def _select_mode(self, mode):
+    def _select_mode(self, mode, persist: bool = True):
+        """Select a report mode and highlight its button.
+
+        `persist=False` for programmatic selection (initial default, restoring a
+        saved mode). Only a real user click should write the setting — _setup_ui
+        ended with a persisting _select_mode("per_paper"), which overwrote the
+        saved mode at construction, so showEvent always read back "per_paper"
+        and the restore never fired for any mode.
+        """
         self._selected_mode = mode
-        self.cfg.set("summ_selected_mode", mode)
-        for btn, m in [(self.btn_per_paper, "per_paper"), (self.btn_topic, "topic"),
-                        (self.btn_global, "global"), (self.btn_related, "related_work"),
-                        (self.btn_introduction, "introduction"), (self.btn_all, "all")]:
+        if persist:
+            self.cfg.set("summ_selected_mode", mode)
+        for btn, m in self._mode_buttons:
             if m == mode:
                 btn.setObjectName("btn_done")
                 btn.style().unpolish(btn); btn.style().polish(btn)
