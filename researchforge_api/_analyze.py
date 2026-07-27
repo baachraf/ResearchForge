@@ -226,7 +226,10 @@ def synthesize_topic(
     cache_dir = paths.topic_cache_dir(model_root, topic_name)
     os.makedirs(cache_dir, exist_ok=True)
 
-    pdf_files = [f for f in os.listdir(input_dir) if f.lower().endswith('.pdf')]
+    # Papers only — patent PDFs are image-only and belong to the Patent Landscape
+    # path, not per-paper text analysis.
+    from researchforge_api import _patents
+    pdf_files = _patents.paper_pdfs(input_dir)
     if not pdf_files:
         return {"error": "No PDFs found", "topic": topic_name}
 

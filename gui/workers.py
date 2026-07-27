@@ -1096,7 +1096,11 @@ class LLMProcessWorker(QThread):
                 if self._stop:
                     break
                 folder_name = os.path.basename(folder_path)
-                pdf_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.pdf')]
+                # Papers only — skip patent PDFs (image-only, handled by Patent
+                # Landscape), so a mixed session's per-paper pass ignores them
+                # instead of failing to extract text and marking them .skipped.
+                from researchforge_api import _patents
+                pdf_files = _patents.paper_pdfs(folder_path)
                 stats['total'] += len(pdf_files)
                 if not pdf_files:
                     continue

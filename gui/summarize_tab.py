@@ -432,9 +432,10 @@ class SummarizeTab(QWidget):
         total_cached = 0
         topics_with_summary = 0
 
+        from researchforge_api import _patents
         for folder_path in subfolders:
             folder_name = os.path.basename(folder_path)
-            pdf_files = sorted([f for f in os.listdir(folder_path) if f.lower().endswith('.pdf')])
+            pdf_files = sorted(_patents.paper_pdfs(folder_path))  # papers only, skip patents
             if not pdf_files:
                 continue
 
@@ -521,7 +522,8 @@ class SummarizeTab(QWidget):
             sf_path = os.path.join(in_dir, sf)
             if not os.path.isdir(sf_path):
                 continue
-            total_papers += len([p for p in os.listdir(sf_path) if p.lower().endswith(".pdf")])
+            from researchforge_api import _patents
+            total_papers += len(_patents.paper_pdfs(sf_path))  # papers only, skip patents
             cache_path = paths.topic_cache_dir(model_output_root, sf)
             if os.path.isdir(cache_path):
                 for cf in os.listdir(cache_path):
@@ -692,10 +694,11 @@ class SummarizeTab(QWidget):
         self._llm_worker.start()
 
     def _count_total_papers(self, in_dir):
+        from researchforge_api import _patents
         self._total_papers = 0
         for f in os.scandir(in_dir):
             if f.is_dir():
-                self._total_papers += sum(1 for p in os.listdir(f.path) if p.lower().endswith(".pdf"))
+                self._total_papers += len(_patents.paper_pdfs(f.path))  # skip patents
 
     def _on_llm_progress(self, msg):
         self.log.emit(msg)

@@ -95,6 +95,29 @@ def write_metadata(patent: dict, dest_dir: str) -> dict:
     return paths
 
 
+def is_patent_pdf(folder: str, pdf_name: str) -> bool:
+    """True if <pdf_name> in <folder> is a patent's original document — i.e. a
+    ``<stem>.json`` metadata sidecar sits beside it. Papers have no sidecar."""
+    stem = os.path.splitext(pdf_name)[0]
+    return os.path.isfile(os.path.join(folder, stem + ".json"))
+
+
+def paper_pdfs(folder: str) -> list:
+    """The ``*.pdf`` files in <folder> that are papers, not patents.
+
+    Patent PDFs are page images with no text layer; the per-paper / topic / global
+    summary passes must not try to extract text from them (they would fail and get
+    a ``.skipped`` marker, inflating the paper count in a mixed session). A patent
+    is recognised by its ``<stem>.json`` sidecar next to the PDF.
+    """
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    return [f for f in names
+            if f.lower().endswith(".pdf") and not is_patent_pdf(folder, f)]
+
+
 def load_metadata(dest_dir: str, pub: str) -> dict:
     """Read a patent's on-disk metadata record, or {} if absent."""
     path = sidecar_paths(dest_dir, pub)["json"]
