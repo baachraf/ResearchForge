@@ -26,10 +26,11 @@ class EpoOpsSource(DocumentSource):
     IMAGE_RETRIEVE_URL = "https://ops.epo.org/3.2/rest-services/{link}.pdf"
 
     # A patent's original document can run to hundreds of image pages (a WO with
-    # its search report hit 201). OPS serves one page per retrieval call, so a
-    # blind full fetch could be 200 paced calls. Cap it so a download stays sane;
-    # the cap is generous enough for a normal patent's biblio+claims+description.
-    MAX_PDF_PAGES = 60
+    # its search report hit 201). OPS serves one page per retrieval call, so the
+    # fetch is one paced call per page. The cap only guards against a pathological
+    # giant; it must be high enough that a normal patent is never truncated — at
+    # 60 real documents were being cut off mid-description.
+    MAX_PDF_PAGES = 300
 
     # search() spends one claims call per hit, so a 20-hit search is 21 calls.
     # This paces the *retrieval* bucket (50/min observed), which is what the

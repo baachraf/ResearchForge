@@ -1367,7 +1367,15 @@ class SearchDownloadTab(QWidget):
                     except Exception:
                         pass
                 if not found:
-                    found = bool(pdf_files)
+                    if p.get("doc_type") == "patent":
+                        # Patents have one PDF per publication number, so check the
+                        # specific file — never "some PDF exists in this folder",
+                        # which would mark a patent whose own PDF failed as present.
+                        from researchforge_api._patents import _pubnum, _safe
+                        pub = _pubnum(p)
+                        found = bool(pub) and f"{_safe(pub)}.pdf" in pdf_files
+                    else:
+                        found = bool(pdf_files)
                 p["file_exists"] = found
 
     def _check_files_and_refresh(self, results: list):

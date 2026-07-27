@@ -791,20 +791,28 @@ class DownloadWorker(QThread):
                     except Exception as e:
                         res = {}
                         print(f"[DL] {i+1}/{len(self.papers)} PATENT ERROR {e} | {title[:60]}", flush=True)
-                    fpath = res.get("pdf") or res.get("json") or ""
-                    if fpath:
+                    # Record + mark downloaded ONLY when the PDF actually arrived.
+                    # The metadata sidecar is written either way, but a metadata-
+                    # only result (PDF fetch failed, e.g. an EPO throttle) must NOT
+                    # be recorded as downloaded — otherwise it shows green with no
+                    # PDF and can never be retried. Left unrecorded, re-Download
+                    # picks it up again.
+                    if res.get("pdf_ok"):
                         registry.record_download(
-                            paper_id, title, paper.get("source", "EPO OPS"), fpath, url)
-                        kind = "PDF+meta" if res.get("pdf_ok") else "meta only"
+                            paper_id, title, paper.get("source", "EPO OPS"),
+                            res["pdf"], url)
                         self.progress.emit(
-                            f"⬇  Patent {kind}: {os.path.basename(fpath)}")
+                            f"⬇  Patent PDF+meta: {os.path.basename(res['pdf'])}")
                         self.paper_done.emit(title, True, res.get("size_mb", 0.0))
                         ok += 1
-                        print(f"[DL] {i+1}/{len(self.papers)} PATENT {kind} | {title[:60]}", flush=True)
+                        print(f"[DL] {i+1}/{len(self.papers)} PATENT PDF+meta | {title[:60]}", flush=True)
                     else:
+                        # Metadata was still saved; the PDF did not come.
+                        self.progress.emit(
+                            f"⚠  Patent PDF unavailable (metadata saved): {title[:60]}")
                         self.paper_done.emit(title, False, 0.0)
                         fail += 1
-                        print(f"[DL] {i+1}/{len(self.papers)} PATENT FAILED | {title[:60]}", flush=True)
+                        print(f"[DL] {i+1}/{len(self.papers)} PATENT META-ONLY (no PDF) | {title[:60]}", flush=True)
                     continue
 
                 if not url:
