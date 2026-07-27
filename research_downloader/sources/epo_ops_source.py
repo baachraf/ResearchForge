@@ -30,6 +30,9 @@ class EpoOpsSource(DocumentSource):
     # in one run rely on the 403 backoff below, not on this interval.
     _MIN_INTERVAL = 0.4
 
+    PAGE_SIZE = 100    # OPS Range maximum per call
+    MAX_RANGE = 2000   # OPS refuses ranges beyond this
+
     def __init__(self, credentials: Dict[str, Any] = None):
         super().__init__(credentials)
         self._token = ""
@@ -101,13 +104,25 @@ class EpoOpsSource(DocumentSource):
             cql = f'({cql}) and pd within "{after_date[:4]}-{time.strftime("%Y")}"'
 
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        params = {"q": cql, "Range": f"1-{min(max_results, 100)}"}
 
         results: List[Dict[str, Any]] = []
         try:
-            resp = self._request(self.SEARCH_URL, headers, params=params)
-            resp.raise_for_status()
-            docs = self._extract_documents(resp.json())
+            docs = []
+            # OPS caps Range at 100 per call and refuses beyond MAX_RANGE, so a
+            # larger max_results has to be paged rather than silently truncated.
+            wanted = max(1, min(max_results, self.MAX_RANGE))
+            for start in range(1, wanted + 1, self.PAGE_SIZE):
+                end = min(start + self.PAGE_SIZE - 1, wanted)
+                resp = self._request(self.SEARCH_URL, headers,
+                                     params={"q": cql, "Range": f"{start}-{end}"})
+                resp.raise_for_status()
+                payload = resp.json()
+                self._raise_on_error_body(payload)
+                page = self._extract_documents(payload)
+                docs.extend(page)
+                if len(page) < (end - start + 1):
+                    break   # last page
+
             for doc in docs[:max_results]:
                 parsed = self._parse_document(doc)
                 if not parsed:
@@ -120,6 +135,20 @@ class EpoOpsSource(DocumentSource):
         except Exception as e:
             print(f"Error checking EPO OPS: {e}")
         return results
+
+    @staticmethod
+    def _raise_on_error_body(payload) -> None:
+        """OPS can answer HTTP 200 with an error document.
+
+        Confirmed live 2026-07-27 on /classification/cpc: status 200, body
+        `{"error": {...}}` reporting an upstream 400. `raise_for_status()` sees
+        nothing wrong and the parser then finds no documents, so the failure is
+        indistinguishable from "your query matched nothing". Surface it instead.
+        """
+        if isinstance(payload, dict) and "error" in payload:
+            err = payload["error"]
+            msg = err.get("message") if isinstance(err, dict) else err
+            raise RuntimeError(f"EPO OPS returned an error body with HTTP 200: {msg}")
 
     @staticmethod
     def _build_cql(query: str) -> str:

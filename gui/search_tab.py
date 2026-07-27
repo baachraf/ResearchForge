@@ -1040,6 +1040,9 @@ class SearchDownloadTab(QWidget):
         qd.setdefault("and_terms", qd.get("query", "").split() if qd.get("query") else [])
         qd.setdefault("or_terms", [])
         qd.setdefault("language", "en")
+        qd.setdefault("lock_sources", False)
+        if qd.get("lock_sources") and qd.get("sources"):
+            return qd   # query carries its own routing (e.g. patent-targeted)
         src = self.cfg.get("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
         if isinstance(src, str):
             # Tolerate a string-encoded value (e.g. '["arxiv","pubmed"]') so it is
@@ -1468,7 +1471,13 @@ class SearchDownloadTab(QWidget):
         }
         self._search_creds = creds
         live_sources = self.cfg.get("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
+        # Queries normally follow the global Settings checkboxes — session-restored
+        # `sources` go stale, which is why this override exists. A query may opt out
+        # by setting lock_sources, which is how a patent-targeted query keeps its own
+        # routing instead of being broadcast to every academic source (and vice versa).
         for q in self._queries:
+            if q.get("lock_sources") and q.get("sources"):
+                continue
             q["sources"] = live_sources
         checked = []
         for row in range(self.query_table.rowCount()):

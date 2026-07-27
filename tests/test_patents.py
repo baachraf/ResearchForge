@@ -332,6 +332,64 @@ class TestEpoOpsAgainstLivePayloads:
             f"second call must wait out _MIN_INTERVAL, slept {waits}"
 
 
+class TestEpoOpsErrorBodyAndPaging:
+    def _src(self):
+        return EpoOpsSource(credentials={"consumer_key": "k", "consumer_secret": "s"})
+
+    def test_http_200_with_error_body_is_not_silent(self):
+        """OPS answers 200 with {"error": ...}; raise_for_status sees nothing, so
+        the parser would report it as 'no results'."""
+        with pytest.raises(RuntimeError, match="HTTP 200"):
+            self._src()._raise_on_error_body({"error": {"message": "upstream 400"}})
+
+    def test_normal_payload_passes_through(self):
+        self._src()._raise_on_error_body(_fixture("epo_search_multi.json"))
+
+    def test_error_body_search_returns_empty_not_crash(self):
+        src = self._src()
+        src._MIN_INTERVAL = 0
+        with patch.object(src, "_get_token", return_value="t"), \
+             patch("requests.get", return_value=_mock_resp({"error": {"message": "boom"}})):
+            assert src.search("rppg") == []
+
+    def test_over_100_results_pages_instead_of_truncating(self):
+        """Range caps at 100 per call, so 250 results must be three calls."""
+        src = self._src()
+        src._MIN_INTERVAL = 0
+        full = _fixture("epo_search_multi.json")
+        sr = full["ops:world-patent-data"]["ops:biblio-search"]["ops:search-result"]
+        sr["exchange-documents"] = sr["exchange-documents"] * 50   # 100 per page
+
+        ranges = []
+
+        def fake_get(url, params=None, headers=None, **kw):
+            ranges.append(params.get("Range"))
+            return _mock_resp(full)
+
+        with patch.object(src, "_get_token", return_value="t"), \
+             patch.object(src, "_fetch_claims", return_value=""), \
+             patch("requests.get", side_effect=fake_get):
+            src.search("rppg", max_results=250)
+
+        assert ranges[:3] == ["1-100", "101-200", "201-250"], ranges
+
+    def test_short_page_stops_paging(self):
+        src = self._src()
+        src._MIN_INTERVAL = 0
+        calls = []
+
+        def fake_get(url, params=None, headers=None, **kw):
+            calls.append(params.get("Range"))
+            return _mock_resp(_fixture("epo_search_multi.json"))   # only 2 docs
+
+        with patch.object(src, "_get_token", return_value="t"), \
+             patch.object(src, "_fetch_claims", return_value=""), \
+             patch("requests.get", side_effect=fake_get):
+            src.search("rppg", max_results=250)
+
+        assert len(calls) == 1, f"a short page means no more results: {calls}"
+
+
 def _mock_resp(payload, status=200, headers=None):
     m = MagicMock()
     m.json.return_value = payload

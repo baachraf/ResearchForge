@@ -71,6 +71,9 @@ def normalize_query(qd: dict) -> dict:
         if src is None:
             src = [t.strip() for t in str(qd.get("sources", "")).strip("[]").replace('"', "").replace("'", "").split(",") if t.strip()]
     qd["sources"] = src
+    # Opt out of the GUI's global source override, so a patent-targeted query is
+    # not broadcast to every academic source. See gui/search_tab.py::_do_search.
+    qd.setdefault("lock_sources", False)
     return qd
 
 
@@ -186,7 +189,8 @@ def add_query_to_session(session_id: str,
                           max_results: int = 20,
                           after_date: str = "",
                           name: str = "",
-                          topic: str = "General") -> dict:
+                          topic: str = "General",
+                          lock_sources: bool = False) -> dict:
     session = load_session(session_id)
     if not session:
         return {"error": f"Session '{session_id}' not found"}
@@ -197,6 +201,7 @@ def add_query_to_session(session_id: str,
         "name": name or _slugify(query_text),
         "query": query_text,
         "sources": sources or _config.get("default_sources", ["arxiv", "semantic_scholar"]),
+        "lock_sources": bool(lock_sources),
         "must_contain": must_contain or [],
         "must_not": must_not or [],
         "max_results": max_results,

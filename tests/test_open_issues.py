@@ -359,5 +359,49 @@ class TestConcurrentSettingsWrite(_IsolatedCase):
         self.assertEqual(a.get("epo_ops_secret"), "S")
 
 
+class TestQuerySourceRouting(_IsolatedCase):
+    """The GUI replaces every query's `sources` with the global Settings
+    checkboxes at search time, so ticking a patent provider sent every academic
+    query to it. A query may now pin its own routing via lock_sources."""
+
+    def test_locked_query_keeps_its_own_sources(self):
+        from researchforge_api import _sessions
+        sid = self._make_session("RoutingSess", [])
+        _sessions.add_query_to_session(sid, "rppg blood pressure",
+                                       sources=["epo_ops"], lock_sources=True,
+                                       name="patents")
+        _sessions.add_query_to_session(sid, "rppg morphology",
+                                       sources=["arxiv"], name="papers")
+        qs = _sessions.load_session(sid)["queries"]
+        locked = [q for q in qs if q["name"] == "patents"][0]
+        plain = [q for q in qs if q["name"] == "papers"][0]
+        self.assertTrue(locked["lock_sources"])
+        self.assertEqual(locked["sources"], ["epo_ops"])
+        self.assertFalse(plain["lock_sources"])
+
+    def test_gui_override_skips_locked_queries(self):
+        """Reproduces gui/search_tab.py::_do_search on plain dicts."""
+        from researchforge_api._sessions import normalize_query
+        live = ["arxiv", "epo_ops"]
+        queries = [
+            normalize_query({"query": "papers", "sources": ["arxiv"]}),
+            normalize_query({"query": "patents", "sources": ["epo_ops"],
+                             "lock_sources": True}),
+        ]
+        for q in queries:
+            if q.get("lock_sources") and q.get("sources"):
+                continue
+            q["sources"] = live
+        self.assertEqual(queries[0]["sources"], live)
+        self.assertEqual(queries[1]["sources"], ["epo_ops"],
+                         "a locked patent query must not inherit academic sources")
+
+    def test_legacy_query_without_flag_still_follows_global(self):
+        from researchforge_api._sessions import normalize_query
+        q = normalize_query({"query": "legacy", "sources": ["arxiv"]})
+        self.assertIn("lock_sources", q)
+        self.assertFalse(q["lock_sources"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -192,11 +192,18 @@ def rf_get_session_queries(session_id: str) -> list:
 @mcp.tool()
 def rf_add_query_to_session(session_id: str, query: str, max_results: int = 20,
                             name: str = "", sources: list = None,
-                            topic: str = "General") -> dict:
+                            topic: str = "General", lock_sources: bool = False) -> dict:
     """Add a search query to an existing session. `name` is the label shown for the
-    query in the GUI (auto-derived from the query text if omitted)."""
+    query in the GUI (auto-derived from the query text if omitted).
+
+    By default the GUI replaces a query's `sources` with the global Settings
+    checkboxes at search time. Set `lock_sources=True` to pin this query to the
+    `sources` given here — use it for a patent-targeted query (patentsview /
+    epo_ops / pqai) so it is not broadcast to every academic source, and to keep
+    academic queries off the patent providers."""
     return _safe(rf.add_query_to_session(session_id, query, max_results=max_results,
-                                         name=name, sources=sources, topic=topic))
+                                         name=name, sources=sources, topic=topic,
+                                         lock_sources=lock_sources))
 
 
 @mcp.tool()
