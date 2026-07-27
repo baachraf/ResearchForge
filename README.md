@@ -273,11 +273,22 @@ Agent: [calls rf_search → rf_download_papers → rf_analyze_paper × 5]
 | **Global synthesis** | "Generate a global cross-topic summary" |
 | **Related work** | "Generate a related work section from my summaries" |
 | **Audit** your paper | "Audit my paper at D:/mypaper.pdf — section by section" |
+| **Patents only** | "Search EPO patents for cuffless blood pressure from PPG — lock those queries to patents" |
+| **Download patents** | "Download those patents — fetch each original document PDF plus its metadata" |
 | **Patent landscape** | "Search patents on rPPG, then build the patent landscape report" |
 | **Full pipeline** | "Run the complete pipeline on D:/downloads/topics/" |
 | **Configure** everything | "Set my DeepSeek API key to sk-... and switch the model to deepseek-chat" |
+| **Change settings by chat** | "Enable only the patent sources, set the relevance threshold to 40, and turn off the must-contain filter" |
 | **Manage sessions** | "List my saved sessions and load the Morphology_Notch one" |
 | **Edit prompts** | "Show me the per-paper analysis prompt and update it" |
+
+> **You control settings just by asking.** The agent flips them through the config tools
+> (`rf_set_config`, `rf_set_search_mode`, `rf_set_llm`, `rf_set_analysis_lens`, …) — e.g.
+> *"enable only patent providers"*, *"lower the score threshold to 40"*, *"switch to
+> general search mode"*. To target patents for specific queries without changing your
+> global defaults, ask it to lock those queries to the patent sources (`lock_sources`).
+> A change made over MCP is picked up immediately by the headless flow; an already-open
+> desktop GUI window may need reopening to reflect it.
 
 **55 MCP tools** cover every button, dropdown, and checkbox from the GUI — including **resumable sessions**: create and search one day, then reload the same session later to download, score, and synthesize, with all state (queries, results, scores, downloads) saved in the session exactly as the GUI persists it.
 
