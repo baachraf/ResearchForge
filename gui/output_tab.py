@@ -112,22 +112,55 @@ class OutputTab(QWidget):
             except Exception:
                 pass
 
+        # Hoisted: the per-paper score colouring below also uses `tm`, and it used
+        # to be bound only inside the top-level report loop — a model dir with
+        # cached analyses but no GLOBAL_SUMMARY/RELATED_WORK/INTRODUCTION raised
+        # NameError.
+        tm = ThemeManager()
+
+        patent_files = []
+        patent_dir = paths.patent_cache_dir(path)
+        if os.path.isdir(patent_dir):
+            patent_files = sorted(
+                [f for f in os.listdir(patent_dir) if f.endswith(".md")],
+                key=str.lower,
+            )
+
         model_item = QTreeWidgetItem(self.file_tree)
         model_item.setText(0, name)
-        model_item.setText(1, f"{len(topic_files)} topics")
+        counts = []
+        if topic_files:
+            counts.append(f"{len(topic_files)} topics")
+        if patent_files:
+            counts.append(f"{len(patent_files)} patents")
+        model_item.setText(1, ", ".join(counts) if counts else "0 topics")
         model_item.setExpanded(True)
 
-        for label in ("GLOBAL_SUMMARY", "RELATED_WORK", "INTRODUCTION"):
+        for label in ("GLOBAL_SUMMARY", "RELATED_WORK", "INTRODUCTION",
+                      "PATENT_LANDSCAPE"):
             md_path = os.path.join(path, f"{label}.md")
             if os.path.isfile(md_path):
                 item = QTreeWidgetItem(model_item)
                 item.setText(0, f"{label}.md")
                 item.setText(1, label.replace("_", " ").title())
                 item.setData(0, Qt.UserRole, md_path)
-                tm = ThemeManager()
                 link_color = tm.color("primary")
                 item.setForeground(0, link_color)
                 font = item.font(0); font.setBold(True); item.setFont(0, font)
+
+        # Per-patent analyses. They live in _patent_cache/ at the model root,
+        # outside the per-topic tree, because patents are not scoped to a query
+        # folder the way downloaded papers are.
+        if patent_files:
+            pat_item = QTreeWidgetItem(model_item)
+            pat_item.setText(0, "Patents")
+            pat_item.setText(1, f"{len(patent_files)} analysed")
+            pat_item.setExpanded(True)
+            for pf in patent_files:
+                p_item = QTreeWidgetItem(pat_item)
+                p_item.setText(0, pf)
+                p_item.setText(1, "Patent Analysis")
+                p_item.setData(0, Qt.UserRole, os.path.join(patent_dir, pf))
 
         for tf in topic_files:
             topic_name = tf.replace("_SUMMARY.md", "")
