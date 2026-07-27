@@ -308,11 +308,16 @@ patents not yet analysed.
 A patents-only session produces the landscape report and nothing else — that is the
 supported "patents are the target" case, not an error.
 
-**Claims may be missing.** PatentsView's claim endpoints are upstream beta, and EPO OPS
-full text is mainly EP/WO. When claims are absent the per-patent analysis says
-`CLAIMS NOT AVAILABLE` and the landscape report excludes that patent from scope
-conclusions rather than silently inflating them. The report header states how many
-patents were metadata-only.
+**Claims text may be unavailable — which is NOT the same as "no claims."** Every patent
+has public claims. The limit is EPO OPS coverage: full text is held mainly for EP/WO, so
+national publications (US, CN, KR, JP) 404 on the claims endpoint and arrive as abstract
+only. When that happens the per-patent analysis says
+`CLAIMS TEXT NOT AVAILABLE via EPO OPS` and the landscape report excludes that patent
+from scope conclusions rather than silently inflating them; the header states how many
+patents this applies to. If a user asks why claims are "missing," explain it is EPO
+coverage (retrievable at the national office / Espacenet), not a hidden or broken field,
+and not fixable via a prompt. **Only EPO OPS is live-tested** — PatentsView and PQAI are
+unverified.
 
 **Never treat the output as legal advice.** The prompts describe claim scope and refuse
 infringement, validity, and freedom-to-operate conclusions by design. If a user asks for

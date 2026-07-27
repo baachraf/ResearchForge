@@ -35,9 +35,13 @@ what the claim actually covers and what it does not. If several independent clai
 different categories (apparatus, method, medium), name each.
 
 If no claims text was supplied, write exactly:
-`CLAIMS NOT AVAILABLE — analysis based on abstract only.`
-Then say what would need checking once claims are retrieved. Do NOT infer claim scope
-from the abstract; an abstract routinely describes more than is claimed.
+`CLAIMS TEXT NOT AVAILABLE via EPO OPS — analysis based on title + abstract only.`
+This patent HAS claims (every patent does); EPO's full-text service simply does not
+carry them for this document — full text is mainly EP/WO, and national publications
+(US, CN, KR, JP) return bibliographic data + abstract only. The claims can be read at
+the national office or on Espacenet. Then say what would need checking once the claims
+are retrieved. Do NOT infer claim scope from the abstract; an abstract routinely
+describes more than is claimed.
 
 ## 4. ASSIGNEE
 Who owns this, and what does it suggest about their direction? If the assignee is absent

@@ -1158,11 +1158,17 @@ def _on_patent_landscape_done(self, res: dict):
     msg = f"Patent landscape written: {total} patents."
     if no_claims:
         with_claims = total - no_claims
-        msg += (f"\n\n{no_claims} of {total} are metadata-only (no claims text) — "
-                f"these are patents whose office publishes no full text through the "
-                f"API (mostly US/CN/KR/JP). They are described from title + abstract "
-                f"and excluded from the claim-scope map. {with_claims} carry full "
-                f"claims (mainly EP/WO).\n\nThis is expected, not a failure.")
+        msg += (f"\n\nFor {no_claims} of {total}, no claims text was available "
+                f"via EPO OPS. Every patent HAS claims — they are public — but "
+                f"EPO's Open Patent Services carries full text mainly for EP and "
+                f"WO documents; for many national publications (US, CN, KR, JP) it "
+                f"returns only bibliographic data + abstract. Those {no_claims} are "
+                f"described from title + abstract and left out of the claim-scope "
+                f"map; read their claims at the national office or on Espacenet. "
+                f"{with_claims} carry full claims (mainly EP/WO).\n\n"
+                f"This is EPO coverage, not a failure. Only the EPO OPS provider "
+                f"has been tested — PatentsView (US, with claims) and PQAI are "
+                f"unverified.")
     self.log.emit(f"Patent landscape written: {total} patents "
                   f"({no_claims} metadata-only) -> {res.get('path', '')}")
     QMessageBox.information(self, "Patent Landscape", msg)

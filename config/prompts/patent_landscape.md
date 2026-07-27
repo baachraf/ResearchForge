@@ -61,7 +61,9 @@ RULES
 - Never give a legal opinion. Describe scope; do not assess infringement, validity, or
   freedom to operate. If the researcher would need that, say it requires a patent
   attorney.
-- Where an individual analysis recorded `CLAIMS NOT AVAILABLE`, do not let that patent
-  silently inflate the scope map. Name it as metadata-only and exclude it from scope
-  conclusions.
+- Where an individual analysis recorded `CLAIMS TEXT NOT AVAILABLE` (its claims were
+  not served by EPO OPS — full text is mainly EP/WO, so US/CN/KR/JP arrive as abstract
+  only), do not let that patent silently inflate the scope map. Say its claims text was
+  not available via EPO OPS — NOT that it "has no claims" (every patent has claims) —
+  and exclude it from scope conclusions.
 - Distinguish what is claimed from what is merely described. Only claims are owned.

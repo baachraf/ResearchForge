@@ -212,17 +212,39 @@ report is the only output — useful when the patents, not the papers, are the t
 Per-patent analyses are cached, so re-running only pays for patents you have not
 analysed yet.
 
-**Limits, stated plainly.** Where claims text is unavailable — PatentsView's claim
-endpoints are upstream beta, and EPO OPS full text is mainly EP/WO — the analysis says
-so and that patent is excluded from scope conclusions instead of silently inflating
-them. The report header gives the metadata-only count. The output describes claim
-scope; it is **not legal advice**, and infringement, validity, and freedom-to-operate
-questions are deferred to a patent attorney by design.
+**What "no claims text" means (it is not what it sounds like).** Every patent has
+legal claims, and they are public — nothing is hidden or paywalled. The limit is
+purely what the **EPO Open Patent Services** full-text corpus covers: claims +
+description are held mainly for **EP** and **WO** documents. For many national
+publications — **US, CN, KR, JP** — EPO returns only bibliographic data and the
+abstract, so its claims endpoint (`.../published-data/publication/docdb/{num}/claims`,
+the endpoint documented in `docs/OPS v3.2 _ EPO Developer Portal.html`) responds **HTTP
+404**. That is a coverage gap in EPO's database, not an error in this tool, and not
+anything a prompt or a different API key changes. The claims for those documents can be
+read directly at the issuing office (USPTO, CNIPA, KIPO, JPO) or via Espacenet.
 
-On EPO OPS that gap is measurable rather than theoretical: over 20 mixed hits, claims
-came back for 10 (WO, EP, GB) and not for the other 10 (US, CN, KR, MA). A US-heavy
-result set therefore yields a thin landscape — expected behaviour, not a failure. Bias
-the search toward EP/WO when claim scope is what you are after.
+When claims text is not available, the analysis is built from title + abstract, the
+patent is **excluded from the claim-scope map** (an abstract describes more than is
+claimed, so inferring scope from it would mislead), and the report header states how
+many patents this applies to. The output describes claim scope; it is **not legal
+advice**, and infringement, validity, and freedom-to-operate questions are deferred to
+a patent attorney by design.
+
+On EPO OPS the gap is measurable, not theoretical: over 20 mixed hits, claims came back
+for 10 (WO, EP, GB) and not for the other 10 (US, CN, KR, MA). A US/CN-heavy result set
+therefore yields a thin claim-scope map — expected behaviour, not a failure. Bias the
+search toward EP/WO when claim scope is what you are after, or add PatentsView (below)
+for US claims.
+
+> **Provider testing status.** **Only the EPO OPS provider has been exercised against a
+> live API** (verified 2026-07-27; six parsing defects found and fixed). **PatentsView
+> and PQAI have never made a live call** — their field names and JSON nesting are taken
+> from documentation and are unverified. Because every adapter returns an empty list
+> rather than raising, a wrong field name on those two would look like "no results," so
+> treat any PatentsView/PQAI output as unproven until it is verified the same way EPO
+> was. The full patent pipeline (search → per-patent analysis → landscape report) has
+> been run end-to-end **only through EPO OPS**, over both the desktop GUI and the MCP
+> server.
 
 ---
 

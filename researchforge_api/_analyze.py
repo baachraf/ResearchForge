@@ -1113,8 +1113,21 @@ def generate_patent_landscape(
             return {"error": "LLM returned an empty landscape report"}
         header = f"# PATENT LANDSCAPE\n\n_{len(analyses)} patents analysed"
         if no_claims:
-            header += f"; {no_claims} without claims text (metadata only)"
+            header += (f"; {no_claims} with no claims text available via EPO OPS "
+                       f"(analysed from title + abstract)")
         header += "._\n\n"
+        if no_claims:
+            header += (
+                "> **On the "
+                f"{no_claims} \"no claims text\" patent(s):** every patent has "
+                "legal claims — these are public. EPO's Open Patent Services holds "
+                "full text (claims + description) mainly for EP and WO documents; "
+                "for many national publications (US, CN, KR, JP) it returns only "
+                "bibliographic data + abstract, so the claims endpoint has nothing "
+                "to serve. Those patents are described from title + abstract and "
+                "kept out of the claim-scope map. Their claims can be read at the "
+                "national office or via Espacenet. Only the EPO OPS provider was "
+                "tested; PatentsView (US, with claims) and PQAI are unverified.\n\n")
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(header + text)
         return {

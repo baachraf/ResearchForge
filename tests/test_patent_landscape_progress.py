@@ -123,12 +123,15 @@ class TestLandscapeProgress(unittest.TestCase):
         self.assertEqual(second["without_claims"], 3,
                          "warm-cache re-run lost the metadata-only count")
 
-    def test_header_states_metadata_only_on_warm_cache(self):
+    def test_header_states_no_claims_count_on_warm_cache(self):
         self._run()
         res = self._run()
         with open(res["path"], encoding="utf-8") as f:
-            header = f.read().splitlines()[2]
-        self.assertIn("3 without claims text (metadata only)", header)
+            head = f.read()
+        # The count survives a warm cache and the wording no longer implies the
+        # patent lacks claims — only that EPO OPS did not serve the text.
+        self.assertIn("3 with no claims text available via EPO OPS", head)
+        self.assertNotIn("has no claims", head.lower())
 
     def test_no_progress_callback_is_fine(self):
         res = self._run(on_progress=None)
