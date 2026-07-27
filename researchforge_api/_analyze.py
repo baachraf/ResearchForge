@@ -957,15 +957,36 @@ def _patent_results(session_id: str) -> list:
 
     ``session["results"]`` is a flat list (see ``_sessions.ensure_full_schema``),
     not a per-query mapping.
+
+    When a patent has been downloaded, its metadata lives on disk beside the PDF
+    (``<pubnum>.json``); that on-disk copy is authoritative, so it is loaded and
+    used instead of the session's copy. Sessions predating the download feature —
+    or patents not yet downloaded — fall back to the session's ``patent_meta``.
     """
-    from researchforge_api import _sessions
+    from researchforge_api import _sessions, _patents, _download
     sess = _sessions.load_session(session_id)
     if not sess or "error" in sess:
         return []
-    return [
+    session_name = sess.get("name", session_id)
+    patents = [
         r for r in (sess.get("results") or [])
         if isinstance(r, dict) and r.get("doc_type") == "patent"
     ]
+    for r in patents:
+        folder = r.get("output_folder") or r.get("query_key") or ""
+        pub = (r.get("patent_meta", {}) or {}).get("publication_number") or r.get("id") or ""
+        if not pub:
+            continue
+        try:
+            out_dir = _download._topic_dir(session_name, folder)
+            record = _patents.load_metadata(out_dir, str(pub))
+        except Exception:
+            record = {}
+        if record.get("patent_meta"):
+            r["patent_meta"] = record["patent_meta"]
+            if record.get("abstract"):
+                r["abstract"] = record["abstract"]
+    return patents
 
 
 def analyze_patent(patent: dict, *, prompt_key: str = "per_patent_prompt",

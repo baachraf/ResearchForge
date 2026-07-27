@@ -1,13 +1,12 @@
-"""Patents must be visible to the user, and must not pretend to download.
+"""Patents must be visible to the user, and download as PDF + metadata sidecars.
 
-Two regressions:
-1. Clicking Download on patents produced a folder holding only
-   downloads_registry.db and no message — the download path has no doc_type
-   awareness and patent hits carry an empty pdf_url.
-2. Check Summaries hardcoded GLOBAL_SUMMARY / RELATED_WORK / INTRODUCTION, so
-   PATENT_LANDSCAPE.md and the per-patent analyses were invisible in the app.
+- A patent download writes <pubnum>.pdf (EPO original document) plus
+  <pubnum>.json / <pubnum>.md metadata into the query folder — the folder, not
+  the session, holds the metadata.
+- Check Summaries lists PATENT_LANDSCAPE.md and the per-patent analyses.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -21,7 +20,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from gui import paths  # noqa: E402
 from gui.output_tab import OutputTab  # noqa: E402
-from gui.search_tab import SearchDownloadTab  # noqa: E402
+from researchforge_api import _patents  # noqa: E402
 
 
 class _NullSignal:
@@ -43,50 +42,61 @@ class _Cfg:
         return ""
 
 
-PATENT = {"title": "A patent", "doc_type": "patent", "source": "EPO OPS"}
-PAPER = {"title": "A paper", "doc_type": "paper", "source": "arXiv"}
+PATENT = {
+    "title": "A PPG patent", "doc_type": "patent", "source": "EPO OPS",
+    "id": "EP4763065A1", "abstract": "A wearable device.",
+    "url": "https://worldwide.espacenet.com/patent/search?q=EP4763065A1",
+    "patent_meta": {"publication_number": "EP4763065A1", "assignee": "ACME NV",
+                    "cpc": ["A61B5/024"], "priority_date": "20241220",
+                    "publication_date": "20260624",
+                    "claims_text": "1. A wearable device ..."},
+}
 
 
-class TestDownloadDropsPatents(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.app = QApplication.instance() or QApplication([])
+class TestPatentDownloadWritesFolder(unittest.TestCase):
+    """Downloading a patent writes metadata (always) + the EPO PDF (when served)
+    into the query folder."""
 
-    def _tab(self):
-        return SearchDownloadTab(_Cfg(), _NullSignal())
+    def test_metadata_sidecars_written_even_without_pdf(self):
+        with tempfile.TemporaryDirectory() as d:
+            # No EPO creds → _epo_source() is None → no PDF, but metadata must land.
+            with mock.patch.object(_patents, "_epo_source", return_value=None):
+                res = _patents.download_patent(dict(PATENT), d)
+            self.assertTrue(os.path.isfile(res["json"]))
+            self.assertTrue(os.path.isfile(res["md"]))
+            self.assertEqual(res["pdf"], "")
+            rec = json.load(open(res["json"], encoding="utf-8"))
+            self.assertEqual(rec["patent_meta"]["assignee"], "ACME NV")
+            self.assertIn("EP4763065A1", open(res["md"], encoding="utf-8").read())
 
-    def test_all_patents_aborts_download(self):
-        tab = self._tab()
-        with mock.patch("gui.search_tab.QMessageBox.information") as box:
-            self.assertIsNone(tab._drop_patents([dict(PATENT), dict(PATENT)]))
-            self.assertTrue(box.called, "user was told nothing")
-            body = " ".join(str(a) for a in box.call_args[0])
-            self.assertIn("Patent Landscape", body,
-                          "message must point at where to read them")
+    def test_pdf_written_when_epo_serves_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = mock.Mock()
 
-    def test_mixed_batch_keeps_papers_only(self):
-        tab = self._tab()
-        with mock.patch("gui.search_tab.QMessageBox.information") as box:
-            rest = tab._drop_patents([dict(PATENT), dict(PAPER), dict(PATENT)])
-        self.assertEqual(len(rest), 1)
-        self.assertEqual(rest[0]["doc_type"], "paper")
-        self.assertTrue(box.called)
+            def _dl(pub, path, on_page=None):
+                with open(path, "wb") as f:
+                    f.write(b"%PDF-1.4 fake")
+                return True
+            fake.download_original_pdf.side_effect = _dl
+            with mock.patch.object(_patents, "_epo_source", return_value=fake):
+                res = _patents.download_patent(dict(PATENT), d)
+            self.assertTrue(res["pdf_ok"])
+            self.assertTrue(os.path.isfile(res["pdf"]))
+            self.assertGreater(res["size_mb"], 0)
 
-    def test_papers_only_is_untouched_and_silent(self):
-        tab = self._tab()
-        batch = [dict(PAPER), dict(PAPER)]
-        with mock.patch("gui.search_tab.QMessageBox.information") as box:
-            rest = tab._drop_patents(batch)
-        self.assertEqual(len(rest), 2)
-        self.assertFalse(box.called, "no dialog when there are no patents")
+    def test_load_metadata_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(_patents, "_epo_source", return_value=None):
+                _patents.download_patent(dict(PATENT), d)
+            rec = _patents.load_metadata(d, "EP4763065A1")
+            self.assertEqual(rec["patent_meta"]["cpc"], ["A61B5/024"])
 
-    def test_missing_doc_type_treated_as_paper(self):
-        """Legacy sessions have no doc_type — they must still download."""
-        tab = self._tab()
-        with mock.patch("gui.search_tab.QMessageBox.information") as box:
-            rest = tab._drop_patents([{"title": "legacy"}])
-        self.assertEqual(len(rest), 1)
-        self.assertFalse(box.called)
+    def test_non_epo_patent_gets_metadata_no_pdf(self):
+        pv = dict(PATENT); pv["source"] = "PatentsView"
+        with tempfile.TemporaryDirectory() as d:
+            res = _patents.download_patent(pv, d)
+            self.assertTrue(os.path.isfile(res["json"]))
+            self.assertEqual(res["pdf"], "")  # only EPO is wired for PDF
 
 
 class TestCheckSummariesShowsPatents(unittest.TestCase):

@@ -285,10 +285,20 @@ MCP looks identical to one built via the GUI.
 Patent providers (`patentsview`, `epo_ops`, `pqai`) are ordinary `rf_search` sources —
 tick them like any other. What differs is downstream.
 
-**Patents never go through download/extract.** Their text arrives with the search hit and
-lives in `result["patent_meta"]` (`claims_text`, `assignee`, `publication_number`,
-`priority_date`, `cpc`). A patent with no PDF on disk still analyses fully. Do not call
-`rf_download_session` expecting patent text — it is already in the session.
+**Patent analysis runs on metadata, not a parsed PDF.** The text used for the summary
+arrives with the search hit and lives in `result["patent_meta"]` (`claims_text`,
+`assignee`, `publication_number`, `priority_date`, `cpc`). A patent analyses fully without
+any download.
+
+**Patents CAN be downloaded** (added 2026-07-27). `rf_download_session` now fetches the EPO
+**original document** as a PDF (via the images service — broad coverage incl. US/CN/KR/JP,
+this is the "Original document" you see on Espacenet) and writes the metadata beside it in
+the query folder: `<pubnum>.pdf`, `<pubnum>.json`, `<pubnum>.md`. The PDF is page images (a
+reading copy) and is **never parsed for text** — no OCR; the summary still uses the
+metadata. When a patent has been downloaded, `generate_patent_landscape` reads its metadata
+from the on-disk `<pubnum>.json` (authoritative), falling back to the session copy
+otherwise. Only EPO OPS patents get a PDF (the sole tested provider); others still get the
+metadata sidecars.
 
 **Every result now carries `doc_type`** (`"paper"` or `"patent"`). It defaults to
 `"paper"`, so pre-existing sessions are unaffected.

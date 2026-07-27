@@ -137,6 +137,25 @@ def download_session(session_id: str,
         if progress_callback:
             progress_callback(f"Downloading {i+1}/{len(targets)}: {r.get('title', 'Untitled')[:60]}")
         out_dir = _topic_dir(session_name, r.get("output_folder") or r.get("query_key") or "")
+
+        # Patents don't download as a PDF the way papers do — fetch the EPO
+        # original document + write the metadata sidecar into the same folder.
+        if r.get("doc_type") == "patent":
+            from researchforge_api import _patents
+            res = _patents.download_patent(r, out_dir)
+            path = res.get("pdf") or res.get("json") or ""
+            if path:
+                r["file_exists"] = bool(res.get("pdf_ok"))
+                r["file_path"] = res.get("pdf") or ""
+                r["meta_path"] = res.get("json") or ""
+                r["file_size_mb"] = res.get("size_mb", 0.0)
+                summary["ok"].append({"id": r.get("id"), "title": r.get("title", ""),
+                                      "path": path, "pdf": res.get("pdf_ok", False)})
+            else:
+                r["file_exists"] = False
+                summary["failed"].append({"id": r.get("id"), "title": r.get("title", "")})
+            continue
+
         path = download_paper(r, output_dir=out_dir, max_size_mb=max_size_mb,
                               skip_content_filter=skip_content_filter)
         if path:

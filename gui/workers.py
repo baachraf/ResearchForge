@@ -776,6 +776,37 @@ class DownloadWorker(QThread):
                 url = paper.get("url", "")
                 paper_id = paper.get("id", "")
 
+                # Patents don't come as a downloadable PDF like papers do — the
+                # original document is fetched from EPO's image service and the
+                # metadata is written beside it. Papers fall through unchanged.
+                if paper.get("doc_type") == "patent":
+                    from researchforge_api import _patents
+                    subfolder = paper.get("output_folder", "default")
+                    pdir = os.path.join(self.target_dir, subfolder)
+                    os.makedirs(pdir, exist_ok=True)
+                    registry = Registry(os.path.join(pdir, "downloads_registry.db"))
+                    self.progress.emit(f"Fetching patent: {title[:70]}...")
+                    try:
+                        res = _patents.download_patent(paper, pdir)
+                    except Exception as e:
+                        res = {}
+                        print(f"[DL] {i+1}/{len(self.papers)} PATENT ERROR {e} | {title[:60]}", flush=True)
+                    fpath = res.get("pdf") or res.get("json") or ""
+                    if fpath:
+                        registry.record_download(
+                            paper_id, title, paper.get("source", "EPO OPS"), fpath, url)
+                        kind = "PDF+meta" if res.get("pdf_ok") else "meta only"
+                        self.progress.emit(
+                            f"⬇  Patent {kind}: {os.path.basename(fpath)}")
+                        self.paper_done.emit(title, True, res.get("size_mb", 0.0))
+                        ok += 1
+                        print(f"[DL] {i+1}/{len(self.papers)} PATENT {kind} | {title[:60]}", flush=True)
+                    else:
+                        self.paper_done.emit(title, False, 0.0)
+                        fail += 1
+                        print(f"[DL] {i+1}/{len(self.papers)} PATENT FAILED | {title[:60]}", flush=True)
+                    continue
+
                 if not url:
                     self.progress.emit(f"  No URL: {title[:70]}")
                     self.paper_done.emit(title, False, 0.0)

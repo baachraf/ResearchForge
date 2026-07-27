@@ -1,3 +1,4 @@
+import os
 import re
 import time
 import requests
@@ -21,6 +22,14 @@ class EpoOpsSource(DocumentSource):
     AUTH_URL = "https://ops.epo.org/3.2/auth/accesstoken"
     SEARCH_URL = "https://ops.epo.org/3.2/rest-services/published-data/search/biblio"
     CLAIMS_URL = "https://ops.epo.org/3.2/rest-services/published-data/publication/docdb/{num}/claims"
+    IMAGES_URL = "https://ops.epo.org/3.2/rest-services/published-data/publication/docdb/{num}/images"
+    IMAGE_RETRIEVE_URL = "https://ops.epo.org/3.2/rest-services/{link}.pdf"
+
+    # A patent's original document can run to hundreds of image pages (a WO with
+    # its search report hit 201). OPS serves one page per retrieval call, so a
+    # blind full fetch could be 200 paced calls. Cap it so a download stays sane;
+    # the cap is generous enough for a normal patent's biblio+claims+description.
+    MAX_PDF_PAGES = 60
 
     # search() spends one claims call per hit, so a 20-hit search is 21 calls.
     # This paces the *retrieval* bucket (50/min observed), which is what the
@@ -457,3 +466,77 @@ class EpoOpsSource(DocumentSource):
         except Exception as e:
             print(f"EPO OPS claims unavailable for {pub_number}: {e}")
             return ""
+
+    def _full_document_ref(self, pub_number: str, headers: Dict[str, str]):
+        """Return (retrieval_link, page_count) for the original FullDocument, or
+        (None, 0) when OPS has no document image for this publication."""
+        resp = self._request(self.IMAGES_URL.format(num=pub_number), headers)
+        if resp.status_code != 200:
+            return None, 0
+        try:
+            inq = (resp.json().get("ops:world-patent-data", {})
+                   .get("ops:document-inquiry", {})
+                   .get("ops:inquiry-result", {}))
+        except ValueError:
+            return None, 0
+        for inst in self._as_list(inq.get("ops:document-instance")):
+            if (inst or {}).get("@desc") == "FullDocument":
+                link = inst.get("@link")
+                try:
+                    pages = int(inst.get("@number-of-pages", 0))
+                except (TypeError, ValueError):
+                    pages = 0
+                return link, pages
+        return None, 0
+
+    def download_original_pdf(self, pub_number: str, dest_path: str,
+                              on_page=None) -> bool:
+        """Download the original published document to ``dest_path`` as a PDF.
+
+        OPS serves the document as page images, one page per retrieval call, so
+        this fetches each page and merges them. Coverage is broad (incl.
+        US/CN/KR/JP) — this is EPO's "Original document", not the parsed full
+        text. Returns True on success. A miss (no document image, auth failure,
+        or no page fetched) returns False without raising.
+        """
+        token = self._get_token()
+        if not token:
+            return False
+        json_headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        link, pages = self._full_document_ref(pub_number, json_headers)
+        if not link or pages <= 0:
+            return False
+
+        try:
+            import fitz  # PyMuPDF — already a dependency (used for PDF text)
+        except ImportError:
+            return False
+
+        pdf_headers = {"Authorization": f"Bearer {token}", "Accept": "application/pdf"}
+        url = self.IMAGE_RETRIEVE_URL.format(link=link)
+        merged = fitz.open()
+        got = 0
+        try:
+            for page in range(1, min(pages, self.MAX_PDF_PAGES) + 1):
+                resp = self._request(url, pdf_headers, params={"Range": str(page)})
+                if resp.status_code != 200 or resp.content[:4] != b"%PDF":
+                    continue
+                try:
+                    with fitz.open(stream=resp.content, filetype="pdf") as one:
+                        merged.insert_pdf(one)
+                    got += 1
+                    if on_page:
+                        try:
+                            on_page(got, min(pages, self.MAX_PDF_PAGES))
+                        except Exception:
+                            pass
+                except Exception:
+                    continue
+            if got == 0:
+                merged.close()
+                return False
+            os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
+            merged.save(dest_path)
+            return True
+        finally:
+            merged.close()

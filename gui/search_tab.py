@@ -2384,37 +2384,6 @@ class SearchDownloadTab(QWidget):
         self._session_save()
         self.log.emit(f"Removed {len(to_delete)} paper(s) from results")
 
-    def _drop_patents(self, papers):
-        """Strip patents out of a download batch and tell the user why.
-
-        Patents carry no PDF — their text (claims, abstract, assignee, CPC) arrives
-        with the search hit and lives in the session under `patent_meta`. The
-        downloader is patent-unaware, so before this guard a patents-only batch
-        produced an empty folder holding nothing but downloads_registry.db and no
-        message at all. Returns the papers that are actually downloadable, or None
-        if the caller should stop.
-        """
-        patents = [p for p in papers if p.get("doc_type") == "patent"]
-        if not patents:
-            return papers
-        rest = [p for p in papers if p.get("doc_type") != "patent"]
-        where = "Generate Reports → Patent Landscape"
-        if not rest:
-            QMessageBox.information(
-                self, "Patents don't download",
-                f"All {len(patents)} selected results are patents, so there is "
-                f"nothing to download.\n\nPatent text is already in the session — "
-                f"claims, abstract, assignee and CPC arrive with the search hit. "
-                f"No PDF is fetched or needed.\n\nTo read them, use {where}.")
-            return None
-        QMessageBox.information(
-            self, "Patents skipped",
-            f"{len(patents)} of {len(papers)} selected results are patents and "
-            f"will be skipped — patents have no PDF to download; their text is "
-            f"already in the session.\n\nDownloading the remaining "
-            f"{len(rest)} paper(s).\n\nTo read the patents, use {where}.")
-        return rest
-
     def _on_download(self, selected_only: bool = True, by_score: bool = False):
         if hasattr(self, '_current_dl_worker') and self._current_dl_worker and self._current_dl_worker.isRunning():
             return
@@ -2438,9 +2407,6 @@ class SearchDownloadTab(QWidget):
                 to_download.append(paper)
         if not to_download:
             QMessageBox.information(self, "Nothing Selected", "No papers selected.")
-            return
-        to_download = self._drop_patents(to_download)
-        if not to_download:
             return
 
         output_root = self._get_output_root()
@@ -3022,9 +2988,6 @@ class SearchDownloadTab(QWidget):
 
         if not flagged:
             QMessageBox.information(self, "No Flagged", "No flagged papers to download.")
-            return
-        flagged = self._drop_patents(flagged)
-        if not flagged:
             return
 
         self.dl_progress.setVisible(True)
