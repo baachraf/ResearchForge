@@ -53,6 +53,8 @@ def normalize_query(qd: dict) -> dict:
         qd["name"] = _slugify(query_text)
     qd.setdefault("intent", "discovery")
     qd.setdefault("must_contain", [])
+    qd.setdefault("must_contain_enabled",
+                  _config.get("default_must_contain_enabled", True))
     qd.setdefault("must_not", [])
     qd.setdefault("max_results", _config.get("default_max_results", 100))
     qd.setdefault("max_size_mb", _config.get("default_max_size_mb", 50.0))

@@ -151,11 +151,22 @@ class QueryBuilderDialog(QDialog):
         kl = QVBoxLayout(grp_kw)
 
         hb_must = QHBoxLayout()
-        hb_must.addWidget(QLabel("Must contain:"))
+        # The label is a checkbox: toggling it enables/disables the must-contain
+        # title filter for this query WITHOUT losing the typed keywords. Default
+        # comes from the session-level "default_must_contain_enabled" setting.
+        self.must_contain_enabled = QCheckBox("Must contain:")
+        self.must_contain_enabled.setChecked(
+            self._cfg.get("default_must_contain_enabled", True) if self._cfg else True)
+        self.must_contain_enabled.setToolTip(
+            "When off, results are NOT filtered by these keywords — the terms are "
+            "kept but the title gate is skipped for this query.")
+        hb_must.addWidget(self.must_contain_enabled)
         self.must_contain = QLineEdit()
         self.must_contain.setPlaceholderText("rPPG, heart rate, waveform (comma-separated)")
         hb_must.addWidget(self.must_contain, 1)
         kl.addLayout(hb_must)
+        self.must_contain_enabled.toggled.connect(self.must_contain.setEnabled)
+        self.must_contain.setEnabled(self.must_contain_enabled.isChecked())
 
         hb_not = QHBoxLayout()
         hb_not.addWidget(QLabel("Must NOT contain:"))
@@ -257,6 +268,11 @@ class QueryBuilderDialog(QDialog):
         self.and_terms.setText(" ".join(data.get("and_terms", [])))
         self.or_terms.setText(", ".join(data.get("or_terms", [])))
         self.must_contain.setText(", ".join(data.get("must_contain", [])))
+        mce = data.get("must_contain_enabled")
+        if mce is None:
+            mce = self._cfg.get("default_must_contain_enabled", True) if self._cfg else True
+        self.must_contain_enabled.setChecked(bool(mce))
+        self.must_contain.setEnabled(bool(mce))
         self.must_not.setText(", ".join(data.get("must_not", [])))
         sources = data.get("sources", [])
         if not sources and self._cfg:
@@ -306,6 +322,7 @@ class QueryBuilderDialog(QDialog):
             "max_results": self.max_q_results.value(),
             "max_size_mb": self.max_pdf_size.value(),
             "must_contain": must_contain,
+            "must_contain_enabled": self.must_contain_enabled.isChecked(),
             "must_not": must_not,
             "relevance_threshold": self.relevance_threshold.value(),
             "force_plus": self.force_plus.isChecked(),
@@ -1051,6 +1068,8 @@ class SearchDownloadTab(QWidget):
         qd.setdefault("after_date", self.cfg.get("default_after_date", ""))
         qd.setdefault("output_folder", qd.get("name", ""))
         qd.setdefault("must_contain", [])
+        qd.setdefault("must_contain_enabled",
+                      self.cfg.get("default_must_contain_enabled", True))
         qd.setdefault("must_not", [])
         qd.setdefault("and_terms", qd.get("query", "").split() if qd.get("query") else [])
         qd.setdefault("or_terms", [])
@@ -1080,19 +1099,59 @@ class SearchDownloadTab(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Load Session")
-        dlg.setMinimumWidth(550)
+        dlg.setMinimumWidth(680)
         dl = QVBoxLayout(dlg)
 
-        lst = QListWidget()
+        # Sortable columns — click any header to sort; a session's id and its
+        # name are independent, so name-sort and date-sort give different orders.
+        class _SessionItem(QTreeWidgetItem):
+            def __lt__(self, other):
+                tw = self.treeWidget()
+                col = tw.sortColumn() if tw else 0
+                a = self.data(col, Qt.UserRole + 1)
+                b = other.data(col, Qt.UserRole + 1)
+                if a is not None and b is not None:
+                    return a < b
+                return super().__lt__(other)
+
+        lst = QTreeWidget()
+        lst.setColumnCount(5)
+        lst.setHeaderLabels(["Name", "Queries", "Results", "Created", "Modified"])
+        lst.setRootIsDecorated(False)
+        lst.setAlternatingRowColors(True)
         lst.setSelectionMode(QAbstractItemView.SingleSelection)
+        lst.setSortingEnabled(True)
+        hdr = lst.header()
+        hdr.setSectionResizeMode(0, QHeaderView.Stretch)
+        for c in (1, 2, 3, 4):
+            hdr.setSectionResizeMode(c, QHeaderView.ResizeToContents)
+
         for s in sessions:
-            item_text = f"{s['name']}  —  {s['query_count']} queries, {s['result_count']} results  ({s['created']})"
-            item = QListWidgetItem(item_text)
+            mtime = 0.0
+            try:
+                mtime = os.path.getmtime(s.get("path", "")) if s.get("path") else 0.0
+            except OSError:
+                mtime = 0.0
+            mod_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else "—"
+            created = str(s.get("created", "") or "—")
+            item = _SessionItem([
+                s["name"], str(s["query_count"]), str(s["result_count"]),
+                created, mod_str,
+            ])
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Unchecked)
-            item.setData(Qt.UserRole, s)
-            lst.addItem(item)
-        lst.itemClicked.connect(lambda item: lst.setCurrentItem(item))
+            item.setCheckState(0, Qt.Unchecked)
+            item.setData(0, Qt.UserRole, s)
+            # Per-column sort keys: name case-insensitive, counts numeric, dates real.
+            item.setData(0, Qt.UserRole + 1, (s["name"] or "").lower())
+            item.setData(1, Qt.UserRole + 1, int(s.get("query_count", 0)))
+            item.setData(2, Qt.UserRole + 1, int(s.get("result_count", 0)))
+            item.setData(3, Qt.UserRole + 1, created)
+            item.setData(4, Qt.UserRole + 1, mtime)
+            item.setTextAlignment(1, Qt.AlignCenter)
+            item.setTextAlignment(2, Qt.AlignCenter)
+            lst.addTopLevelItem(item)
+
+        lst.sortItems(4, Qt.DescendingOrder)   # newest-modified first by default
         dl.addWidget(lst)
 
         hb_btns = QHBoxLayout()
@@ -1109,10 +1168,10 @@ class SearchDownloadTab(QWidget):
 
         def _delete_checked():
             to_delete = []
-            for i in range(lst.count()):
-                item = lst.item(i)
-                if item.checkState() == Qt.Checked:
-                    to_delete.append((i, item.data(Qt.UserRole)))
+            for i in range(lst.topLevelItemCount()):
+                item = lst.topLevelItem(i)
+                if item.checkState(0) == Qt.Checked:
+                    to_delete.append((item, item.data(0, Qt.UserRole)))
 
             if not to_delete:
                 QMessageBox.information(dlg, "None Checked", "Check the sessions you want to delete first.")
@@ -1127,9 +1186,11 @@ class SearchDownloadTab(QWidget):
             if reply != QMessageBox.Yes:
                 return
 
-            for i, session in reversed(to_delete):
+            for item, session in to_delete:
                 self._session_manager.delete(session["id"])
-                lst.takeItem(i)
+                idx = lst.indexOfTopLevelItem(item)
+                if idx >= 0:
+                    lst.takeTopLevelItem(idx)
                 self.log.emit(f"Deleted session: {session['name']}")
                 if self._session_id == session["id"]:
                     self._session_id = None
@@ -1157,13 +1218,13 @@ class SearchDownloadTab(QWidget):
         if dlg.exec() == QDialog.Accepted:
             load_item = lst.currentItem()
             if not load_item:
-                for i in range(lst.count()):
-                    item = lst.item(i)
-                    if item.checkState() == Qt.Checked:
+                for i in range(lst.topLevelItemCount()):
+                    item = lst.topLevelItem(i)
+                    if item.checkState(0) == Qt.Checked:
                         load_item = item
                         break
             if load_item:
-                session = load_item.data(Qt.UserRole)
+                session = load_item.data(0, Qt.UserRole)
                 data = self._session_manager.load(session["id"])
                 if data:
                     self._restore_session(data, session["id"])
@@ -1347,7 +1408,13 @@ class SearchDownloadTab(QWidget):
         self.query_table.setItem(row, 0, cb)
         self.query_table.setItem(row, 1, QTableWidgetItem(qd["name"]))
         self.query_table.setItem(row, 2, QTableWidgetItem(qd["query"]))
-        self.query_table.setItem(row, 3, QTableWidgetItem(", ".join(qd.get("must_contain", []))))
+        mc_terms = ", ".join(qd.get("must_contain", []))
+        mc_on = qd.get("must_contain_enabled", True)
+        mc_item = QTableWidgetItem(mc_terms if mc_on else (f"{mc_terms}  (off)" if mc_terms else "(off)"))
+        if not mc_on:
+            mc_item.setForeground(QColor("#999"))
+            mc_item.setToolTip("Must-contain filter is OFF for this query — double-click to change.")
+        self.query_table.setItem(row, 3, mc_item)
         self.query_table.setItem(row, 4, QTableWidgetItem(", ".join(qd.get("must_not", []))))
         self.query_table.setItem(row, 5, QTableWidgetItem(", ".join(qd["sources"])))
 
@@ -1762,7 +1829,7 @@ class SearchDownloadTab(QWidget):
         self.results_table.setSortingEnabled(False)
         self.results_table.setUpdatesEnabled(False)
         self.results_table.setRowCount(0)
-        must_contains = {q["name"]: q.get("must_contain", []) for q in self._queries}
+        must_contains = {q["name"]: (q.get("must_contain", []) if q.get("must_contain_enabled", True) else []) for q in self._queries}
         must_nots = {q["name"]: q.get("must_not", []) for q in self._queries}
         thresholds = {q["name"]: q.get("relevance_threshold", 2) for q in self._queries}
 
@@ -1782,7 +1849,7 @@ class SearchDownloadTab(QWidget):
         start = self.results_table.rowCount()
         if start >= len(self._search_results):
             return
-        must_contains = {q["name"]: q.get("must_contain", []) for q in self._queries}
+        must_contains = {q["name"]: (q.get("must_contain", []) if q.get("must_contain_enabled", True) else []) for q in self._queries}
         must_nots = {q["name"]: q.get("must_not", []) for q in self._queries}
         thresholds = {q["name"]: q.get("relevance_threshold", 2) for q in self._queries}
         seen_titles = getattr(self, '_seen_result_titles', {})

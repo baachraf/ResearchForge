@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QLineEdit, QGroupBox, QWidget,
     QAbstractItemView, QDialogButtonBox, QMenu, QTabWidget,
-    QFileDialog, QComboBox, QListWidget, QListWidgetItem,
+    QFileDialog, QComboBox, QListWidget, QListWidgetItem, QCheckBox,
 )
 from PySide6.QtCore import Qt, Signal, QThread, QTimer, QSize
 from PySide6.QtGui import QIcon
@@ -799,6 +799,20 @@ class SessionCreatorDialog(QDialog):
         self.avoid_kw.setPlaceholderText("Avoid topics (e.g. deep learning, clinical trials)")
         self.avoid_kw.setToolTip("Topics the LLM should avoid when generating queries.")
         btns_col.addWidget(self.avoid_kw)
+
+        # Session-level default for the per-query "must contain" title filter.
+        # Generated queries inherit this; each can still be toggled afterward in
+        # the search query panel (double-click the query).
+        self.chk_must_contain_default = QCheckBox("Filter results by 'must contain' keywords")
+        self.chk_must_contain_default.setChecked(
+            self.cfg.get("default_must_contain_enabled", True) if self.cfg else True)
+        self.chk_must_contain_default.setToolTip(
+            "Default for new queries in this session. When off, searches are not "
+            "gated by must-contain keywords. Per-query overrides live in the "
+            "search query panel.")
+        self.chk_must_contain_default.toggled.connect(
+            lambda on: self.cfg and self.cfg.set("default_must_contain_enabled", bool(on)))
+        btns_col.addWidget(self.chk_must_contain_default)
 
         btns_col.addStretch()
 

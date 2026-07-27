@@ -56,6 +56,7 @@ DEFAULT_SETTINGS = {
     "default_after_date": "2020-01-01",
     "default_sources": ["arxiv", "semantic_scholar", "web", "brave", "pubmed"],
     "default_relevance_threshold": 2,
+    "default_must_contain_enabled": True,
     "default_content_filter_enabled": True,
     "default_force_plus": False,
     "our_work_context": "",
