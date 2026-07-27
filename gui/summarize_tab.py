@@ -1091,8 +1091,15 @@ class _PatentLandscapeWorker(QThread):
 
 def _on_patent_landscape(self, force_rerun: bool = False):
     """Patent Landscape button handler. Bound onto SummarizeTab below."""
-    session_id = self._effective_session_name()
-    if not session_id:
+    # Two different things, previously conflated: `session_name` is the sanitised
+    # path segment the summary layout is built from, `session_id` is the session
+    # JSON's filename stem. They are independent — a GUI session is saved as
+    # session_20260727_114039.json while its name is "rPPG systems". Passing the
+    # name as the id made the API fail to load the session, which surfaced as
+    # "synthesize_* needs ... a valid session_id".
+    session_name = self._effective_session_name()
+    session_id = self.cfg.get("last_session", "") or session_name
+    if not session_name and not session_id:
         QMessageBox.warning(self, "No session", "Load or create a session first.")
         return
 
@@ -1100,7 +1107,7 @@ def _on_patent_landscape(self, force_rerun: bool = False):
         # Overwrite means re-analyse: drop the per-patent cache so every patent
         # is sent to the LLM again.
         try:
-            root = paths.model_output_root(self.cfg, session_id, self.cfg.get("llm_model", ""))
+            root = paths.model_output_root(self.cfg, session_name, self.cfg.get("llm_model", ""))
             cache = paths.patent_cache_dir(root)
             if os.path.isdir(cache):
                 shutil.rmtree(cache)

@@ -164,6 +164,29 @@ def list_sessions() -> list[dict]:
     return _get_mgr().list_sessions()
 
 
+def resolve_session_id(ref: str) -> str:
+    """Accept a session id (the JSON filename stem) OR a session ``name`` and
+    return the canonical id. Returns "" when neither matches.
+
+    Sessions are stored as ``<id>.json`` but the id and the ``name`` field are
+    independent: a session created by the GUI is saved as
+    ``session_20260727_114039.json`` while its name is "rPPG systems". The GUI
+    only ever holds the *name* as a path segment, so callers routinely pass a
+    name where an id is expected — which silently failed to load and surfaced as
+    "needs ... a valid session_id".
+    """
+    if not ref:
+        return ""
+    if _get_mgr().load(ref) is not None:
+        return ref
+    seg = re.sub(r'[\\/*?:"<>|]', '_', ref)
+    for s in list_sessions():
+        name = s.get("name", "")
+        if name == ref or re.sub(r'[\\/*?:"<>|]', '_', name) == seg:
+            return s.get("id", "")
+    return ""
+
+
 def load_session(session_id: str) -> Optional[dict]:
     return _get_mgr().load(session_id)
 

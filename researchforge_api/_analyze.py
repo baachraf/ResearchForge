@@ -26,11 +26,11 @@ from llm_pdf_engine import (
 
 def _session_name(session_id: str) -> str:
     """Resolve a session_id to its canonical ``name`` field. Returns '' if
-    the session can't be loaded."""
+    the session can't be loaded. Accepts a session name as well as an id."""
     if not session_id:
         return ""
     from researchforge_api import _sessions
-    s = _sessions.load_session(session_id)
+    s = _sessions.load_session(_sessions.resolve_session_id(session_id) or session_id)
     return (s.get("name") if s else "") or ""
 
 
@@ -45,10 +45,13 @@ def _resolve_model_root(session_id: str, output_dir: str) -> str:
         return output_dir
     sn = _session_name(session_id)
     if not sn:
+        detail = (f" No session matched {session_id!r} — it is neither a session "
+                  f"id (the JSON filename stem) nor a session name."
+                  if session_id else " No session_id was given.")
         raise ValueError(
             "synthesize_* needs either an explicit output_dir or a valid "
             "session_id, so the output can land in the GUI's "
-            "summary/<session>/<model>/ layout."
+            "summary/<session>/<model>/ layout." + detail
         )
     return paths.model_output_root(_config, sn)
 
@@ -1019,6 +1022,11 @@ def generate_patent_landscape(
     Per-patent analyses are cached under the model root so re-running only pays
     for patents that have not been analysed yet.
     """
+    # Accept a session name as well as an id — the GUI only holds the name.
+    if session_id:
+        from researchforge_api import _sessions
+        session_id = _sessions.resolve_session_id(session_id) or session_id
+
     try:
         model_root = _resolve_model_root(session_id, output_dir)
     except ValueError as e:
