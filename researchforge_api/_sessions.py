@@ -19,6 +19,8 @@ _DEFAULT_SOURCE_FILTERS = {
     "arXiv": True, "OpenAlex": True, "Crossref": True, "Europe PMC": True,
     "Sem. Scholar": True, "PubMed": True, "CORE": False, "Brave": True,
     "DuckGo": True, "Local": True,
+    # Patent providers — names match the `source` string each adapter emits.
+    "PatentsView": True, "EPO OPS": True, "PQAI": True,
 }
 
 

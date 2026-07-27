@@ -546,9 +546,24 @@ class SearchDownloadTab(QWidget):
         self._source_menu.aboutToShow.connect(self._sync_source_menu)
         has_brave = bool(self.cfg.get("brave_api_key", ""))
         has_core = bool(self.cfg.get("core_api_key", ""))
-        _key_gated = {"Brave": has_brave, "CORE": has_core}
+        _key_gated = {
+            "Brave": has_brave,
+            "CORE": has_core,
+            "PatentsView": bool(self.cfg.get("patentsview_api_key", "")),
+            "EPO OPS": bool(self.cfg.get("epo_ops_key", "")),
+            "PQAI": bool(self.cfg.get("pqai_api_key", "")),
+        }
+        # Academic sources first, then the patent providers below a separator.
+        # These labels MUST match the `source` string each adapter emits verbatim
+        # ("PatentsView", "EPO OPS", "PQAI") — _apply_filters matches a row by the
+        # text of its Source cell, so a name that is missing here hides the row.
         for src_name in ["arXiv", "OpenAlex", "Crossref", "Europe PMC",
-                         "Sem. Scholar", "PubMed", "CORE", "Brave", "DuckGo", "Local"]:
+                         "Sem. Scholar", "PubMed", "CORE", "Brave", "DuckGo", "Local",
+                         None,
+                         "PatentsView", "EPO OPS", "PQAI"]:
+            if src_name is None:
+                self._source_menu.addSeparator()
+                continue
             action = self._source_menu.addAction(src_name)
             action.setCheckable(True)
             if src_name in _key_gated and not _key_gated[src_name]:
@@ -1970,6 +1985,23 @@ class SearchDownloadTab(QWidget):
         else:
             return f"Sources [{checked}/{total}] ▼"
 
+    def _source_visible(self, cell_text, active):
+        """Should a row with this Source cell survive the source filter?
+
+        Two things the raw `cell_text in active` test got wrong:
+        - the cell may carry a "📌 " pin prefix, which never matches a menu name;
+        - a source with NO menu entry matched nothing and was hidden outright.
+          That is what made every patent result invisible before the patent
+          providers were added to the menu. An unknown source is now SHOWN, so a
+          future adapter can never silently disappear from the results table.
+        """
+        name = cell_text or ""
+        if name.startswith("📌"):
+            name = name[1:].strip()
+        if name not in self._source_filters:
+            return True
+        return name in active
+
     def _apply_filters(self):
         self.results_table.setUpdatesEnabled(False)
         active = set()
@@ -1993,7 +2025,7 @@ class SearchDownloadTab(QWidget):
             dup_match = True
             is_local = filt_item and filt_item.text() == "\u2014"
             if src_item:
-                src_match = src_item.text() in active
+                src_match = self._source_visible(src_item.text(), active)
             if filt_item and filt_item.text() == "DUP":
                 dup_match = False
             if not is_local:
@@ -2071,7 +2103,7 @@ class SearchDownloadTab(QWidget):
                 continue
 
             match_hidden = False
-            if src_item and src_item.text() not in active_sources:
+            if src_item and not self._source_visible(src_item.text(), active_sources):
                 source_hidden += 1
                 match_hidden = True
             if not match_hidden and title_filter_on and title_text and title_item:
@@ -2099,7 +2131,8 @@ class SearchDownloadTab(QWidget):
         M = {"Web": "DuckGo", "SemanticScholar": "Sem. Scholar"}
         src_counts = Counter(M.get(p.get("source", ""), p.get("source", "?")) for p in self._search_results)
         src_parts = []
-        for src in ["arXiv", "DuckGo", "Sem. Scholar", "Brave", "PubMed", "Local"]:
+        for src in ["arXiv", "DuckGo", "Sem. Scholar", "Brave", "PubMed", "Local",
+                    "PatentsView", "EPO OPS", "PQAI"]:
             c = src_counts.get(src, 0)
             if c:
                 src_parts.append(f"{src}: {c}")
