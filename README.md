@@ -13,7 +13,7 @@ Desktop application that searches academic paper databases, downloads PDFs, and 
 ## Features
 
 - **Multi-source search**: arXiv, OpenAlex, Crossref, Europe PMC, PubMed, Semantic Scholar, CORE, Brave, DuckDuckGo — nine providers, most needing no API key
-- **Patent search**: PatentsView (US), EPO OPS (worldwide), PQAI (semantic prior-art) — patents are analysed as patents (problem / solution / what is claimed / assignee) and synthesised into a standalone **Patent Landscape** report
+- **Patent search**: EPO OPS (worldwide, live-verified), PatentsView (US) and PQAI (semantic prior-art) *(both untested against a live API)* — patents are analysed as patents (problem / solution / what is claimed / assignee) and synthesised into a standalone **Patent Landscape** report
 - **Session creator**: AI-enhanced research description with automatic query generation and "Analyze My Paper" mode
 - **Local PDF injection**: add your own PDFs or entire folders; they auto-participate in relevance scoring and download workflows
 - **Relevance scoring**: LLM rates each paper 0–100 against your research context, with keyword-based fallback
@@ -171,14 +171,22 @@ but they are analysed as patents, and they produce their own report.
 
 ### Providers
 
-| Provider | Coverage | Key | Cost |
-|----------|----------|-----|------|
-| **PatentsView** | US granted + pre-grant | Self-serve API key | Free |
-| **EPO OPS** | Worldwide bibliographic; full text mainly EP/WO | OAuth2 consumer key + secret | Free tier, 4 GB/week |
-| **PQAI** | Semantic prior-art search | Token, by request | Free for academic / non-commercial |
+| Provider | Coverage | Key | Cost | Status |
+|----------|----------|-----|------|--------|
+| **EPO OPS** | Worldwide bibliographic; full text mainly EP/WO | OAuth2 consumer key + secret | Free tier, 4 GB/week | ✅ **Verified against the live API** (2026-07-27) |
+| **PatentsView** | US granted + pre-grant | Self-serve API key | Free | ⚠️ **Never called live** — written from documentation |
+| **PQAI** | Semantic prior-art search | Token, by request | Free for academic / non-commercial | ⚠️ **Never called live** — written from documentation |
 
 Keys go in **Set Keys** on the Settings tab. Until a key is present the source stays
 greyed out, exactly like CORE and Brave.
+
+> **Only EPO OPS has been exercised against a real API.** The other two adapters were
+> written from provider documentation and have never made a live call, so their field
+> names and JSON nesting are unconfirmed. Every adapter returns an empty list rather
+> than raising, so a wrong field name there would look like "no results" rather than an
+> error — treat an empty patent result set from PatentsView or PQAI as unproven, not as
+> an answer. Verifying EPO turned up six such defects, including a query form that
+> returned 1 hit where the correct one returned 925.
 
 > Patents are never downloaded as PDFs for analysis. Their text — including claims —
 > arrives with the search result, so a patent analyses fully without any file on disk.
@@ -210,6 +218,11 @@ so and that patent is excluded from scope conclusions instead of silently inflat
 them. The report header gives the metadata-only count. The output describes claim
 scope; it is **not legal advice**, and infringement, validity, and freedom-to-operate
 questions are deferred to a patent attorney by design.
+
+On EPO OPS that gap is measurable rather than theoretical: over 20 mixed hits, claims
+came back for 10 (WO, EP, GB) and not for the other 10 (US, CN, KR, MA). A US-heavy
+result set therefore yields a thin landscape — expected behaviour, not a failure. Bias
+the search toward EP/WO when claim scope is what you are after.
 
 ---
 
