@@ -23,9 +23,11 @@ class EpoOpsSource(DocumentSource):
     CLAIMS_URL = "https://ops.epo.org/3.2/rest-services/published-data/publication/docdb/{num}/claims"
 
     # search() spends one claims call per hit, so a 20-hit search is 21 calls.
-    # OPS advertises its remaining per-minute budget in X-Throttling-Control and
-    # tightens it when busy — the search bucket was seen dropping to 5/min under
-    # load on 2026-07-27. Space calls out and back off rather than melting it.
+    # This paces the *retrieval* bucket (50/min observed), which is what the
+    # claims loop consumes. It does NOT cover the search bucket: OPS advertises
+    # its remaining budget in X-Throttling-Control and dropped that one to 5/min
+    # — 12s apart — while reporting itself overloaded on 2026-07-27. Many queries
+    # in one run rely on the 403 backoff below, not on this interval.
     _MIN_INTERVAL = 0.4
 
     def __init__(self, credentials: Dict[str, Any] = None):

@@ -231,7 +231,10 @@ class TestEpoOpsAgainstLivePayloads:
     def test_ipc_codes_are_not_mixed_into_cpc(self):
         src = self._src()
         docs = src._extract_documents(_fixture("epo_search_multi.json"))
-        for c in src._parse_document(docs[0])["patent_meta"]["cpc"]:
+        cpc = src._parse_document(docs[0])["patent_meta"]["cpc"]
+        assert cpc, "empty list would pass the loop below vacuously"
+        # IPC arrives space-padded ("A61B   5/   021    A I"); CPC must not.
+        for c in cpc:
             assert "/" in c and " " not in c
 
     # -- Dates: priority date is not the publication date --
@@ -316,13 +319,17 @@ class TestEpoOpsAgainstLivePayloads:
             assert g.call_count == 1
 
     def test_calls_are_paced(self):
+        """404s are not retried, so the only sleep here is the pacing one — assert
+        on its duration, not merely that some sleep happened."""
         src = self._src()
         src._MIN_INTERVAL = 5.0
         with patch("requests.get", return_value=_mock_resp({}, status=404)), \
              patch("time.sleep") as slp:
             src._fetch_claims("EP1A", {})
             src._fetch_claims("EP2A", {})
-        assert slp.called, "second call must wait out the minimum interval"
+        waits = [c.args[0] for c in slp.call_args_list if c.args]
+        assert any(4.0 < w <= 5.0 for w in waits), \
+            f"second call must wait out _MIN_INTERVAL, slept {waits}"
 
 
 def _mock_resp(payload, status=200, headers=None):
