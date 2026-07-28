@@ -82,6 +82,47 @@ def rf_set_llm(provider: str = "", endpoint: str = "", model: str = "") -> str:
 
 
 @mcp.tool()
+def rf_select_llm_mode(mode: str = "", provider: str = "", endpoint: str = "", model: str = "", api_key: str = "") -> str:
+    """Select or query the execution mode for synthesis LLM operations.
+    If `mode` is empty, returns current selection status and options.
+    Valid modes:
+      - 'configured': Use ResearchForge's registered cloud provider (DeepSeek, OpenAI, etc.)
+      - 'local': Use a local model server (LM Studio, Ollama at http://localhost:11434/v1)
+      - 'agent': Delegate LLM synthesis/completion to the calling AI agent in-context.
+    Optionally pass provider, endpoint, model, or api_key to configure them in settings at the same time."""
+    if not mode:
+        current = rf.get("mcp_llm_mode", "NOT_SET")
+        return (f"Current LLM Mode: {current!r}. Options: 'configured' (cloud), 'local' (Ollama/LM Studio), 'agent' (calling AI agent). "
+                f"Configured Provider={rf.get('llm_provider')!r}, Model={rf.get('llm_model')!r}")
+    mode_clean = mode.strip().lower()
+    if mode_clean not in ("configured", "local", "agent"):
+        return f"ERROR: Invalid mode {mode!r}. Must be 'configured', 'local', or 'agent'."
+    rf.set_config("mcp_llm_mode", mode_clean)
+    if provider or endpoint or model:
+        rf.set_llm(provider=provider or None, endpoint=endpoint or None, model=model or None)
+    if api_key and provider:
+        rf.set_api_key(provider, api_key)
+    return f"LLM execution mode set to {mode_clean!r}. (Provider={rf.get('llm_provider')}, Endpoint={rf.get('llm_endpoint')}, Model={rf.get('llm_model')})"
+
+
+@mcp.tool()
+def rf_save_artifact(session_id: str, relative_path: str, content: str) -> dict:
+    """Save an agent-synthesized artifact into a session's canonical folder structure on disk.
+    `relative_path` can be e.g. 'PATENT_LANDSCAPE.md', 'RELATED_WORK.md', 'GLOBAL_SUMMARY.md',
+    or 'detailed_topic_reviews/MyTopic/MASTER_REPORT.md'."""
+    try:
+        from researchforge_api import _analyze
+        model_root = _analyze._resolve_model_root(session_id, "")
+        target_path = os.path.join(model_root, relative_path)
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return {"path": target_path, "chars": len(content), "status": "saved", "session_id": session_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
 def rf_test_connection() -> str:
     """Test the LLM connection. Returns status message."""
     ok, msg = rf.test_connection()
@@ -107,6 +148,7 @@ def rf_set_analysis_lens(similarity: bool = True, novelty: bool = True,
     rf.set_analysis_lens(similarity=similarity, novelty=novelty,
                          methodology=methodology, gaps=gaps)
     return _safe(rf.get_analysis_lenses())
+
 
 
 @mcp.tool()
@@ -423,6 +465,22 @@ def rf_analyze_own_paper(pdf_path: str, session_id: str = "") -> dict:
     return _safe(rf.analyze_own_paper(pdf_path, session_id=session_id))
 
 
+def _check_llm_mode_guard():
+    mode = (rf.get("mcp_llm_mode") or "").strip().lower()
+    if not mode:
+        return {
+            "status": "CHOICE_REQUIRED",
+            "message": "EXPLICIT USER CHOICE REQUIRED: No LLM execution mode selected.",
+            "options": [
+                "1. Configured cloud provider (DeepSeek / OpenAI) -> call rf_select_llm_mode('configured')",
+                "2. Local model (LM Studio / Ollama) -> call rf_select_llm_mode('local', endpoint=...)",
+                "3. Current Agent LLM -> call rf_select_llm_mode('agent')"
+            ],
+            "instruction": "Present these 3 options to the user and ask for their explicit choice before calling any synthesis tool."
+        }
+    return mode
+
+
 @mcp.tool()
 def rf_synthesize_topic(input_dir: str = "", output_dir: str = "",
                         session_id: str = "", topic_name: str = "") -> dict:
@@ -430,6 +488,9 @@ def rf_synthesize_topic(input_dir: str = "", output_dir: str = "",
     (per-paper analysis → topic synthesis). Pass session_id (+ optional
     topic_name) to write to the GUI's summary/<session>/<model>/ layout; or
     pass input_dir + output_dir explicitly for raw/ad-hoc use."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.synthesize_topic(input_dir=input_dir, output_dir=output_dir,
                                       session_id=session_id, topic_name=topic_name))
 
@@ -438,6 +499,9 @@ def rf_synthesize_topic(input_dir: str = "", output_dir: str = "",
 def rf_synthesize_global(output_dir: str = "", session_id: str = "") -> dict:
     """Global cross-topic synthesis across all topic summaries in the model
     root. Pass session_id to target the GUI's summary/<session>/<model>/ folder."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.synthesize_global(output_dir=output_dir, session_id=session_id))
 
 
@@ -445,6 +509,9 @@ def rf_synthesize_global(output_dir: str = "", session_id: str = "") -> dict:
 def rf_generate_related_work(output_dir: str = "", session_id: str = "") -> dict:
     """Generate a Related Work section from existing summaries. Pass session_id
     to write to the GUI's summary/<session>/<model>/ folder."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.generate_related_work(output_dir=output_dir, session_id=session_id))
 
 
@@ -456,6 +523,9 @@ def rf_generate_patent_landscape(output_dir: str = "", session_id: str = "") -> 
     (i.e. searched via the patentsview / epo_ops / pqai sources). Per-patent
     analyses are cached under <model_root>/_patent_cache/, so re-running only pays
     for new patents. Pass session_id for GUI parity."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.generate_patent_landscape(output_dir=output_dir, session_id=session_id))
 
 
@@ -476,7 +546,11 @@ def rf_analyze_patent(patent_json: str, context: str = "", intent: str = "") -> 
 def rf_generate_introduction(output_dir: str = "", session_id: str = "") -> dict:
     """Generate an Introduction section from existing summaries. Pass session_id
     to write to the GUI's summary/<session>/<model>/ folder."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.generate_introduction(output_dir=output_dir, session_id=session_id))
+
 
 
 @mcp.tool()

@@ -40,6 +40,21 @@ All settings persist to `~/.ResearchForge/settings.json` — shared with the GUI
 
 ---
 
+## 🚨 MANDATORY RULE: Explicit LLM Execution Mode Selection (No Fallback)
+
+Before triggering any synthesis operation (`rf_synthesize_topic`, `rf_synthesize_global`, `rf_generate_related_work`, `rf_generate_patent_landscape`, `rf_generate_introduction`), the agent **MUST** check `rf_select_llm_mode()` or present the **3-option choice menu** to the user:
+
+1. **Option 1: Configured Cloud Provider** (DeepSeek, OpenAI, etc.) — `rf_select_llm_mode('configured')`
+2. **Option 2: Local Model** (LM Studio or Ollama at `http://localhost:11434/v1`) — `rf_select_llm_mode('local', endpoint=...)`
+3. **Option 3: Active Agent LLM** (In-context completion by the calling AI agent) — `rf_select_llm_mode('agent')`
+
+**Strict Requirements:**
+- **No Silent Fallbacks:** You must never assume a default provider or silently choose one. If `rf_select_llm_mode()` returns `CHOICE_REQUIRED`, ask the user explicitly.
+- **Mid-Session Switching:** Whenever the user asks to *"change model"*, *"switch LLM"*, *"re-configure"*, or *"show model menu"*, immediately display the 3-option choice menu again and execute `rf_select_llm_mode(...)`.
+- **Saving Agent Artifacts:** If Option 3 is selected, save your synthesized markdown directly to disk using `rf_save_artifact(session_id=..., relative_path=..., content=...)` to maintain full GUI parity.
+
+---
+
 ## ⚠️ THE GOLDEN RULE: pass `session_id` for GUI parity
 
 **Every tool that writes persistent data accepts a `session_id` parameter. Always pass it.**
