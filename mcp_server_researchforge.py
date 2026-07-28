@@ -38,6 +38,24 @@ def _safe(result):
     return str(result)
 
 
+def _check_llm_mode_guard():
+    """Return the current llm mode string, or a CHOICE_REQUIRED dict if not set.
+    Every tool that calls an LLM must call this first and return early if dict."""
+    mode = (rf.get("mcp_llm_mode") or "").strip().lower()
+    if not mode:
+        return {
+            "status": "CHOICE_REQUIRED",
+            "message": "EXPLICIT USER CHOICE REQUIRED: No LLM execution mode selected.",
+            "options": [
+                "1. Configured cloud provider (DeepSeek / OpenAI) -> call rf_select_llm_mode('configured')",
+                "2. Local model (LM Studio / Ollama) -> call rf_select_llm_mode('local', endpoint=...)",
+                "3. Current Agent LLM -> call rf_select_llm_mode('agent')"
+            ],
+            "instruction": "Present these 3 options to the user and wait for their explicit choice. Do NOT proceed without a choice."
+        }
+    return mode
+
+
 # ═══════════════════════════════════════════════════════════════
 # CONFIG
 # ═══════════════════════════════════════════════════════════════
@@ -477,20 +495,6 @@ def rf_analyze_own_paper(pdf_path: str, session_id: str = "") -> dict:
     return _safe(rf.analyze_own_paper(pdf_path, session_id=session_id))
 
 
-def _check_llm_mode_guard():
-    mode = (rf.get("mcp_llm_mode") or "").strip().lower()
-    if not mode:
-        return {
-            "status": "CHOICE_REQUIRED",
-            "message": "EXPLICIT USER CHOICE REQUIRED: No LLM execution mode selected.",
-            "options": [
-                "1. Configured cloud provider (DeepSeek / OpenAI) -> call rf_select_llm_mode('configured')",
-                "2. Local model (LM Studio / Ollama) -> call rf_select_llm_mode('local', endpoint=...)",
-                "3. Current Agent LLM -> call rf_select_llm_mode('agent')"
-            ],
-            "instruction": "Present these 3 options to the user and ask for their explicit choice before calling any synthesis tool."
-        }
-    return mode
 
 
 @mcp.tool()
