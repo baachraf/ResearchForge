@@ -38,6 +38,11 @@ def _safe(result):
     return str(result)
 
 
+def _log_mcp(msg: str):
+    sys.stderr.write(f"[ResearchForge MCP] {msg}\n")
+    sys.stderr.flush()
+
+
 def _check_llm_mode_guard():
     """Return the current llm mode string, or a CHOICE_REQUIRED dict if not set.
     Every tool that calls an LLM must call this first and return early if dict."""
@@ -120,6 +125,7 @@ def rf_select_llm_mode(mode: str = "", provider: str = "", endpoint: str = "", m
         rf.set_llm(provider=provider or None, endpoint=endpoint or None, model=model or None)
     if api_key and provider:
         rf.set_api_key(provider, api_key)
+    _log_mcp(f"LLM execution mode selected: {mode_clean!r} (Provider={rf.get('llm_provider')}, Model={rf.get('llm_model')})")
     return f"LLM execution mode set to {mode_clean!r}. (Provider={rf.get('llm_provider')}, Endpoint={rf.get('llm_endpoint')}, Model={rf.get('llm_model')})"
 
 
@@ -334,31 +340,21 @@ def _ensure_query_registered(session_id: str, query_name: str, query_text: str,
 def rf_search(query: str, sources: list = None, max_results: int = 20,
               after_date: str = "", session_id: str = "", query_name: str = "",
               compact: bool = True, fields: list = None) -> dict:
-    """Search academic paper databases. Sources: arxiv, semantic_scholar, pubmed, brave, web, openalex, crossref, europe_pmc, core. Default: arxiv, semantic_scholar, web, brave, pubmed.
-
-    If `session_id` is given, the hits are also registered into that session
-    (GUI-loadable, with FULL fields incl. abstracts) and linked to `query_name`
-    (or a slug derived from the query). The query itself is added to the
-    session's query list so the GUI's query panel shows it alongside the results.
-
-    `compact` (default True) trims the RETURNED payload to id/title/url/year/source
-    to stay under the MCP token cap — the session still stores full records. Pass
-    `compact=False` for the full payload (e.g. to feed abstracts straight into
-    rf_score_papers), or `fields=[...]` to choose the returned columns."""
-    # Always fetch full results so the session gets complete records.
+    """Search academic paper databases."""
+    _log_mcp(f"rf_search: query='{query}' sources={sources} max_results={max_results} session_id='{session_id}'")
     out = _safe(rf.search(query, sources=sources, max_results=max_results, after_date=after_date))
     if session_id and isinstance(out, dict) and out.get("results"):
         try:
-            # Resolve the effective query name: explicit > slug of the query text.
             qname = query_name or re.sub(r"[^0-9A-Za-z\s]", " ", query).split()
             qname = query_name or "_".join(qname[:6]).lower() or "query"
             _ensure_query_registered(session_id, qname, query, sources, max_results, after_date)
             rf.set_session_results(session_id, out["results"],
                                    query_key=qname, append=True)
             out["registered_to_session"] = session_id
+            _log_mcp(f"rf_search: registered {len(out['results'])} hits to session '{session_id}' under query '{qname}'")
         except Exception as e:
             out["session_save_error"] = str(e)
-    # Trim the response only AFTER the session has stored the full records.
+            _log_mcp(f"rf_search error saving session: {e}")
     if compact and isinstance(out, dict) and out.get("results"):
         out["results"] = rf.compact_results(out["results"], fields)
         out["compact"] = True
@@ -461,13 +457,15 @@ def rf_score_papers(papers_json: str, research_context: str = "",
 
 @mcp.tool()
 def rf_score_session(session_id: str, paper_ids: list = None, scoring_depth: int = 1) -> dict:
-    """Score a session's registered results against its own research context and
-    persist relevance_score/score_reason back onto the session. `paper_ids` limits
-    which results to score (default: all). scoring_depth: 1=fast, 2=compare, 3=analyze."""
+    """Score a session's registered results against its own research context."""
     guard = _check_llm_mode_guard()
     if isinstance(guard, dict):
         return guard
-    return _safe(rf.score_session(session_id, paper_ids=paper_ids, scoring_depth=scoring_depth))
+    _log_mcp(f"rf_score_session: scoring session '{session_id}' (depth={scoring_depth})...")
+    res = _safe(rf.score_session(session_id, paper_ids=paper_ids, scoring_depth=scoring_depth))
+    if isinstance(res, dict):
+        _log_mcp(f"rf_score_session complete: {res.get('scored', 0)} scored out of {res.get('total', 0)} total.")
+    return res
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -607,14 +605,16 @@ def rf_run_full_pipeline(input_dir: str = "", output_dir: str = "",
 @mcp.tool()
 def rf_create_session(name: str, research_description: str,
                       focus_keywords: str = "", topic: str = "General") -> dict:
-    """Full session creation: enhance research → generate queries → save session.
-    NOTE: This tool calls the LLM internally (for query generation and research enhancement).
-    An explicit LLM mode must be selected first via rf_select_llm_mode()."""
+    """Full session creation: enhance research → generate queries → save session."""
     guard = _check_llm_mode_guard()
     if isinstance(guard, dict):
         return guard
-    return _safe(rf.create_session_full(name, research_description,
+    _log_mcp(f"rf_create_session: creating session '{name}' with topic '{topic}'...")
+    res = _safe(rf.create_session_full(name, research_description,
                                          focus_keywords=focus_keywords, topic=topic))
+    if isinstance(res, dict) and "queries" in res:
+        _log_mcp(f"rf_create_session complete: session '{name}' created with {len(res['queries'])} generated queries.")
+    return res
 
 
 # ═══════════════════════════════════════════════════════════════

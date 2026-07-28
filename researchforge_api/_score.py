@@ -1,3 +1,5 @@
+import sys
+import json
 import os
 import re
 import tempfile
@@ -8,6 +10,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from researchforge_api import _config, _llm, _prompts
 from research_downloader.pdf_resolver import resolve_pdf_url, is_direct_pdf
+
+
+def _log(msg: str):
+    sys.stderr.write(f"[ResearchForge] {msg}\n")
+    sys.stderr.flush()
 
 
 FALLBACK_SCORING = """\
@@ -131,6 +138,57 @@ def _keyword_score(research_context: str, focus_keywords: str, avoid_topics: str
     return max(0, min(100, raw))
 
 
+def _score_batch_llm(client, model: str, batch: list[dict], research_context: str, intent: str, focus_keywords: str, avoid_topics: str) -> dict[int, tuple[int, str]]:
+    """Score a batch of up to 15 papers in ONE LLM call. Returns dict mapping paper index in batch -> (score, reason)."""
+    papers_text = []
+    for idx, p in enumerate(batch):
+        t = p.get("title", "Untitled")
+        c = (p.get("abstract") or p.get("content") or "")[:500]
+        papers_text.append(f"[{idx+1}] Title: {t}\nContent: {c}")
+
+    prompt = (
+        "You are an expert research relevance evaluator. Rate each paper's relevance (0-100) to the research context below.\n\n"
+        f"RESEARCH CONTEXT:\nContext: {research_context}\nIntent: {intent}\nKeywords: {focus_keywords}\nAvoid: {avoid_topics}\n\n"
+        "SCORING BANDS (0-100):\n"
+        "- 90-100: Same core problem, same domain, similar methods\n"
+        "- 70-89: Same core problem, same domain, different approach\n"
+        "- 50-69: Related sub-problem in same domain\n"
+        "- 25-49: Same broad domain, different specific problem\n"
+        "- 0-24: Different problem entirely (<=15 if covers avoid topics)\n"
+        "PROBLEM MATCH IS THE GATE. If the problem is different, score <=10 regardless of shared techniques.\n\n"
+        "PAPERS TO SCORE:\n" + "\n\n".join(papers_text) + "\n\n"
+        "Respond ONLY with a valid JSON array containing an object for each paper:\n"
+        '[{"id": 1, "score": 85, "reason": "1-sentence reason"}, {"id": 2, "score": 30, "reason": "1-sentence reason"}]'
+    )
+
+    try:
+        res = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1, max_tokens=2048, timeout=40.0,
+        )
+        text = res.choices[0].message.content or ""
+        json_match = re.search(r'\[.*\]', text, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group(0))
+            out = {}
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and "id" in item:
+                        try:
+                            pid = int(item["id"]) - 1
+                            sc = int(item.get("score", -1))
+                            rs = str(item.get("reason", "")).strip()
+                            if 0 <= sc <= 100 and 0 <= pid < len(batch):
+                                out[pid] = (sc, rs or _band_reason(sc))
+                        except Exception:
+                            pass
+            return out
+    except Exception as e:
+        _log(f"Batch LLM scoring warning: {e}")
+    return {}
+
+
 def score_papers(
     papers: list[dict],
     research_context: str = "",
@@ -144,101 +202,53 @@ def score_papers(
     client = _llm.create_client_from_config(timeout=120.0)
     model = _config.get("llm_model", "")
 
-    prompt_template = _prompts.get_prompt("rate_relevance_prompt") or FALLBACK_SCORING
-    if prompt_template.strip():
-        pl = prompt_template.strip().lower()
-        if "research:" not in pl or "paper:" not in pl or pl.find("research:") < pl.find("paper:"):
-            prompt_template = FALLBACK_SCORING
+    _log(f"Scoring {len(papers)} papers (depth={scoring_depth}, model={model or 'default'})...")
 
-    results = []
-
-    for i, paper in enumerate(papers):
-        if progress_callback:
-            progress_callback(f"Scoring {i+1}/{len(papers)}: {paper.get('title', 'Untitled')[:60]}")
-
-        title = paper.get("title", "Untitled")
-        content = paper.get("abstract", "")
-        reason = ""
-        score = -1
-
-        if not content:
+    # Extract/prepare missing local content
+    for paper in papers:
+        if not paper.get("abstract") and not paper.get("content"):
             url = paper.get("url", "")
             if paper.get("source") == "Local" and os.path.exists(url):
-                content, _ = _extract_abstract_and_intro(url)
-            elif url:
-                resolved = paper.get("_resolved_pdf_url") or (resolve_pdf_url(url, 12) if not is_direct_pdf(url) else None)
-                pdf_url = resolved or (url if is_direct_pdf(url) else None)
-                if pdf_url:
-                    try:
-                        r = requests.get(pdf_url, timeout=30, stream=True, verify=False, allow_redirects=True)
-                        ct = r.headers.get("Content-Type", "").lower()
-                        if r.status_code == 200 and "pdf" in ct:
-                            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-                                for chunk in r.iter_content(8192):
-                                    tf.write(chunk)
-                                temp_path = tf.name
-                            content, _ = _extract_abstract_and_intro(temp_path)
-                            try:
-                                os.remove(temp_path)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
+                c, _ = _extract_abstract_and_intro(url)
+                if c:
+                    paper["content"] = c
 
-        if not content:
-            score = -1
-            reason = "no_content"
-        else:
-            if len(content) > 600:
-                try:
-                    summary_prompt = (
-                        f"Summarize this paper's core elements in 2-3 sentences:\n"
-                        f"1) Problem it solves\n2) Method used\n3) Domain/field\n\n"
-                        f"Title: {title}\nContent: {content[:2000]}\n\nConcise summary:"
-                    )
-                    res = client.chat.completions.create(
-                        model=model, messages=[{"role": "user", "content": summary_prompt}],
-                        temperature=0.1, max_tokens=1024, timeout=20.0,
-                    )
-                    s = res.choices[0].message.content
-                    if s and s.strip():
-                        content = s.strip()[:500]
-                except Exception:
-                    pass
+    batch_size = 15
+    results = []
+    total_batches = (len(papers) + batch_size - 1) // max(batch_size, 1)
 
-            filled = prompt_template
-            for ph, val in [("{context}", research_context), ("{intent}", intent),
-                            ("{focus_keywords}", focus_keywords), ("{avoid_topics}", avoid_topics),
-                            ("{title}", title), ("{content}", content[:800]), ("{abstract}", content[:800])]:
-                filled = filled.replace(ph, val or "")
-            filled += _REASON_INSTRUCTION
+    for b_idx, b_start in enumerate(range(0, len(papers), batch_size)):
+        b_end = min(b_start + batch_size, len(papers))
+        chunk = papers[b_start:b_end]
 
-            try:
-                res = client.chat.completions.create(
-                    model=model,
-                    messages=[{"role": "user", "content": filled}],
-                    temperature=0.1, max_tokens=1024,
-                )
-                text = res.choices[0].message.content or ""
-                score, reason = _parse_score_reason(text)
-            except Exception as e:
-                score = -1
-                reason = f"LLM error: {str(e)[:80]}"
+        _log(f"Scoring batch {b_idx + 1}/{total_batches} (papers {b_start + 1}-{b_end} of {len(papers)})...")
+        if progress_callback:
+            progress_callback(f"Scoring papers {b_start + 1}-{b_end} of {len(papers)}...")
 
-            if score == -1:
+        scores_dict = _score_batch_llm(client, model, chunk, research_context, intent, focus_keywords, avoid_topics)
+
+        for idx, paper in enumerate(chunk):
+            title = paper.get("title", "Untitled")
+            content = paper.get("abstract") or paper.get("content") or ""
+
+            if idx in scores_dict:
+                score, reason = scores_dict[idx]
+            elif not content:
+                score, reason = -1, "no_content"
+            else:
                 score = _keyword_score(research_context, focus_keywords, avoid_topics, content, title)
-                reason = reason or "keyword fallback"
-            elif not reason:
-                reason = _band_reason(score)
+                reason = _band_reason(score) + " (keyword)"
 
-        paper["relevance_score"] = score
-        paper["score_reason"] = reason
-        results.append(dict(paper=paper, score=score, reason=reason))
+            paper["relevance_score"] = score
+            paper["score_reason"] = reason
+            results.append(dict(paper=paper, score=score, reason=reason))
 
     try:
         client._client.close()
     except Exception:
         pass
+
+    _log(f"Scoring complete: {len(results)} papers scored.")
     return results
 
 

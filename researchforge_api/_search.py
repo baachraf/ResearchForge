@@ -1,3 +1,4 @@
+import sys
 import re
 import time
 from datetime import datetime
@@ -20,6 +21,11 @@ from gui.discovery import discover as _discover_endpoints
 from difflib import SequenceMatcher
 
 
+def _log(msg: str):
+    sys.stderr.write(f"[ResearchForge Search] {msg}\n")
+    sys.stderr.flush()
+
+
 # Fields kept when a caller asks for a compact result set. Abstracts and author
 # lists are the bulk of a search payload; dropping them keeps MCP responses under
 # the transport's token cap (open-issue #4).
@@ -27,16 +33,11 @@ _COMPACT_FIELDS = ("id", "title", "url", "year", "source", "query_source")
 
 
 def compact_results(results, fields=None):
-    """Project each search hit down to a small field set.
-
-    Default keeps id/title/url/year/source (+query_source). Pass ``fields`` to
-    choose your own. This is what makes large MCP sweeps affordable — a full
-    result set with abstracts routinely ran 57-340 KB per query."""
+    """Project each search hit down to a small field set."""
     keys = list(fields) if fields else list(_COMPACT_FIELDS)
     out = []
     for r in results or []:
         row = {k: r.get(k) for k in keys if k in r}
-        # Surface a usable source label even if only query_source is populated.
         if "source" in keys and not row.get("source") and r.get("query_source"):
             row["source"] = r.get("query_source")
         out.append(row)
@@ -80,15 +81,10 @@ def search_papers(
     compact: bool = False,
     fields: Optional[list[str]] = None,
 ) -> dict:
-    """Search across configured sources. Returns dict with 'results' and per-source stats.
-
-    ``compact=True`` trims each result to a small field set (see
-    ``compact_results``) so the payload stays small — recommended for MCP/agent
-    use on broad sweeps. ``total`` always reflects the full hit count."""
+    """Search across configured sources. Returns dict with 'results' and per-source stats."""
     if sources is None:
         sources = _config.get_list("default_sources", ["arxiv", "semantic_scholar", "web", "brave", "pubmed"])
     elif isinstance(sources, str):
-        # An agent may pass sources as a string instead of a JSON array.
         sources = [s.strip() for s in sources.strip("[]").replace('"', "").replace("'", "").split(",") if s.strip()]
 
     search_term = _clean_query(query)
@@ -98,6 +94,8 @@ def search_papers(
             search_term = search_term + " " + " ".join(missing)
 
     after_date = _sanitize_date(after_date)
+
+    _log(f"Searching: '{search_term}' across sources: {sources} (max_results={max_results})...")
 
     available_sources = {"web": WebSource()}
 
@@ -118,7 +116,6 @@ def search_papers(
     if core_key:
         available_sources["core"] = CoreSource(credentials={"api_key": core_key})
 
-    # Patent providers. All key-gated; absent keys simply omit the source.
     pv_key = _config.get("patentsview_api_key", "")
     if pv_key:
         available_sources["patentsview"] = PatentsViewSource(credentials={"api_key": pv_key})
@@ -137,6 +134,7 @@ def search_papers(
     for source_name, source_obj in available_sources.items():
         if source_name not in sources:
             continue
+        _log(f"  Fetching from {source_name}...")
         if progress_callback:
             progress_callback(f"Searching {source_name}...")
         try:
@@ -149,8 +147,10 @@ def search_papers(
                 r["query_source"] = source_name
             all_results.extend(results)
             source_stats[source_name] = len(results)
+            _log(f"  -> {source_name}: {len(results)} papers found.")
         except Exception as e:
             source_stats[source_name] = f"error: {e}"
+            _log(f"  -> {source_name}: error {e}")
 
         if source_name == "arxiv":
             time.sleep(3.0)
@@ -159,9 +159,11 @@ def search_papers(
         elif source_name in ("openalex", "crossref", "europe_pmc", "core"):
             time.sleep(0.4)
 
+    _log(f"Search complete: {len(all_results)} total papers retrieved.")
     results_out = compact_results(all_results, fields) if compact else all_results
     return {"results": results_out, "sources": source_stats, "total": len(all_results),
             "compact": bool(compact)}
+
 
 
 def discover_endpoints(timeout: float = 3.0) -> list[dict]:
