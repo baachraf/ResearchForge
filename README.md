@@ -292,7 +292,30 @@ Agent: [calls rf_search → rf_download_papers → rf_analyze_paper × 5]
 
 **55 MCP tools** cover every button, dropdown, and checkbox from the GUI — including **resumable sessions**: create and search one day, then reload the same session later to download, score, and synthesize, with all state (queries, results, scores, downloads) saved in the session exactly as the GUI persists it.
 
-> ** Agents: read [`AGENTS.md`](AGENTS.md) first.** It documents the session-driven workflow, the `session_id` rule (required for GUI parity), the timeout/persistence pattern (heavy ops like audit/synthesize time out at the MCP client but persist to disk — retrieve via `rf_get_audit_result`), and a per-tool reference for all 55 tools.
+> **Agents: read [`AGENTS.md`](AGENTS.md) first.** It documents the session-driven workflow, the `session_id` rule (required for GUI parity), the timeout/persistence pattern (heavy ops like audit/synthesize time out at the MCP client but persist to disk — retrieve via `rf_get_audit_result`), and a per-tool reference for all 55 tools.
+
+### LLM Execution Mode (MCP-only feature)
+
+When running via MCP, ResearchForge does not automatically pick which LLM to use. **Before any operation that calls an LLM** (session creation, scoring, synthesis, analysis, audit), the server requires an **explicit user choice**:
+
+| Option | What it means | How to activate |
+|---|---|---|
+| **Configured cloud provider** | Use the provider already set in ResearchForge settings (e.g. DeepSeek, OpenAI) | `rf_select_llm_mode('configured')` |
+| **Local model** | Use a locally running model via LM Studio or Ollama | `rf_select_llm_mode('local', endpoint='http://localhost:11434/v1', model='...')` |
+| **Agent LLM** | Delegate synthesis/completion to the calling AI agent itself (Gemini, Claude, GPT, …) | `rf_select_llm_mode('agent')` |
+
+The choice is **asked once and saved permanently** to `~/.ResearchForge/settings.json`. All subsequent calls in the same session — and in future sessions — use the saved mode without asking again.
+
+To **change the mode** at any time, simply ask your agent: *"switch LLM"*, *"change model"*, or *"show me the model menu"* — it will present the 3 options again and call `rf_select_llm_mode(...)` with your choice.
+
+When **Agent LLM** mode is selected:
+- The MCP tool returns the fully assembled prompt and context to the agent without making any external HTTP call.
+- The agent completes the synthesis using its own model in-context.
+- The result is saved to the session's canonical folder via `rf_save_artifact(session_id, path, content)` so the desktop GUI reads it normally.
+
+This means you can use ResearchForge's search, download, and session management with **your current AI agent's LLM** — no extra API key, no extra cost.
+
+
 
 ### How it works
 
