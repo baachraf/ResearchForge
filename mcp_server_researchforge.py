@@ -432,6 +432,9 @@ def rf_score_papers(papers_json: str, research_context: str = "",
                     intent: str = "", focus_keywords: str = "",
                     avoid_topics: str = "", scoring_depth: int = 1) -> list:
     """Score paper relevance 0-100 via LLM. Pass papers as JSON array. scoring_depth: 1=fast, 2=compare, 3=analyze."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     papers = json.loads(papers_json)
     return _safe(rf.score_papers(papers, research_context=research_context,
                                   intent=intent, focus_keywords=focus_keywords,
@@ -443,6 +446,9 @@ def rf_score_session(session_id: str, paper_ids: list = None, scoring_depth: int
     """Score a session's registered results against its own research context and
     persist relevance_score/score_reason back onto the session. `paper_ids` limits
     which results to score (default: all). scoring_depth: 1=fast, 2=compare, 3=analyze."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.score_session(session_id, paper_ids=paper_ids, scoring_depth=scoring_depth))
 
 
@@ -453,6 +459,9 @@ def rf_score_session(session_id: str, paper_ids: list = None, scoring_depth: int
 @mcp.tool()
 def rf_analyze_paper(pdf_path: str, prompt_key: str = "per_paper_prompt") -> dict:
     """Analyze a single PDF — extract method, contributions, results, limitations."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.analyze_paper(pdf_path, prompt_key=prompt_key))
 
 
@@ -462,6 +471,9 @@ def rf_analyze_own_paper(pdf_path: str, session_id: str = "") -> dict:
     session creation. Pass session_id to persist the analysis into that session
     (paper_data/paper_path/paper_titles) so the GUI's 'Analyze My Paper' view of
     the session shows it; otherwise the analysis is returned only."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.analyze_own_paper(pdf_path, session_id=session_id))
 
 
@@ -534,6 +546,9 @@ def rf_analyze_patent(patent_json: str, context: str = "", intent: str = "") -> 
     """Analyse a single patent record (JSON with title/abstract/patent_meta) into
     problem, solution, what is claimed new, assignee, and relation to the research.
     Use rf_generate_patent_landscape for a whole session instead."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     import json as _json
     try:
         patent = _json.loads(patent_json)
@@ -556,12 +571,18 @@ def rf_generate_introduction(output_dir: str = "", session_id: str = "") -> dict
 @mcp.tool()
 def rf_generate_queries(research_description: str) -> dict:
     """Generate structured search queries from a natural-language research description."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.generate_queries(research_description))
 
 
 @mcp.tool()
 def rf_enhance_research(research_description: str) -> dict:
     """Enhance a research description — split into CONTRIBUTION and PROBLEM SPACE."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.enhance_research(research_description))
 
 
@@ -572,6 +593,9 @@ def rf_run_full_pipeline(input_dir: str = "", output_dir: str = "",
     global synthesis. Pass session_id to read from that session's downloads and
     write to its summary/<session>/<model>/ folder; or pass input_dir +
     output_dir explicitly for raw use."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.run_full_pipeline(input_dir=input_dir, output_dir=output_dir,
                                        session_id=session_id))
 
@@ -579,7 +603,12 @@ def rf_run_full_pipeline(input_dir: str = "", output_dir: str = "",
 @mcp.tool()
 def rf_create_session(name: str, research_description: str,
                       focus_keywords: str = "", topic: str = "General") -> dict:
-    """Full session creation: enhance research → generate queries → save session."""
+    """Full session creation: enhance research → generate queries → save session.
+    NOTE: This tool calls the LLM internally (for query generation and research enhancement).
+    An explicit LLM mode must be selected first via rf_select_llm_mode()."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.create_session_full(name, research_description,
                                          focus_keywords=focus_keywords, topic=topic))
 
@@ -609,6 +638,9 @@ def rf_get_cached_analysis(cache_path: str) -> str:
 @mcp.tool()
 def rf_audit_paper(pdf_path: str, mode: str = "section") -> dict:
     """Run a 10-dimension IEEE pre-submission audit on a paper. mode: 'section' (section-by-section) or 'full' (single call, needs large context model)."""
+    guard = _check_llm_mode_guard()
+    if isinstance(guard, dict):
+        return guard
     return _safe(rf.audit_paper(pdf_path, mode=mode))
 
 
