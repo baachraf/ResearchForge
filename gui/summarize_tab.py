@@ -776,7 +776,18 @@ class SummarizeTab(QWidget):
         _ak = get_provider_api_key(_pn, self.cfg)
         if mode == "all":
             rw_path = paths.related_work_file(model_root)
-            if not os.path.isfile(rw_path) and endpoint and model:
+            cache = paths.patent_cache_dir(model_root)
+            # "All" is the paper pipeline; it must also cover patents when the
+            # session has them. Run Patent Landscape first (it populates
+            # _patent_cache/), then its completion handler continues into Related
+            # Work — otherwise a patents-only "All" reaches Related Work with no
+            # paper summaries AND no patent analyses and fails.
+            if self._session_has_patents() and not os.path.isdir(cache):
+                self._all_continue_after_patent = True
+                launching_next = True
+                self._selected_mode = "patent_landscape"
+                QTimer.singleShot(150, lambda: self._on_patent_landscape(False))
+            elif not os.path.isfile(rw_path) and endpoint and model:
                 launching_next = True
                 self._selected_mode = "related_work"
                 QTimer.singleShot(150, lambda: self._on_related_work(endpoint, model, _pn, _ak))
@@ -793,7 +804,9 @@ class SummarizeTab(QWidget):
         QTimer.singleShot(250, self._refresh_tree)
 
         if launching_next:
-            next_name = "Related Work" if self._selected_mode == "related_work" else "Introduction"
+            next_name = {"related_work": "Related Work",
+                         "patent_landscape": "Patent Landscape",
+                         "introduction": "Introduction"}.get(self._selected_mode, "Introduction")
             self.lbl_progress.setText(f"Launching {next_name}...")
             self.log.emit(f"Launching {next_name}...")
         else:
@@ -1147,13 +1160,45 @@ def _on_patent_tick(self, done: int, total: int, label: str):
     self.lbl_progress.setText(f"⏳ Patent {done + 1}/{total}: {label}")
 
 
+def _session_has_patents(self) -> bool:
+    """True if the active session holds any patent result."""
+    sid = self.cfg.get("last_session", "") or self._effective_session_name()
+    if not sid:
+        return False
+    try:
+        from gui.session_manager import SessionManager
+        s = SessionManager().load(sid)
+        return bool(s) and any(
+            r.get("doc_type") == "patent" for r in (s.get("results") or []))
+    except Exception:
+        return False
+
+
 def _on_patent_landscape_done(self, res: dict):
     self.btn_patent.setEnabled(True)
     self.overall_progress.setVisible(False)
     self._patent_worker = None
+    continue_all = getattr(self, "_all_continue_after_patent", False)
+    self._all_continue_after_patent = False
     if "error" in res:
         self.log.emit(f"Patent landscape failed: {res['error']}")
+        # Even mid-"All", a patents-only session has nothing else to synthesise,
+        # so surface the error rather than pushing on into Related Work.
         QMessageBox.warning(self, "Patent Landscape", res["error"])
+        return
+    if continue_all:
+        # Part of an "All" run — chain into Related Work (now that the patent
+        # analyses exist) without an interrupting popup.
+        from PySide6.QtCore import QTimer
+        self.log.emit("Patent landscape done — continuing All → Related Work.")
+        endpoint = self.cfg.get("llm_endpoint", "")
+        model = self.cfg.get("llm_model", "")
+        _pn = self.cfg.get("llm_provider", "LM Studio")
+        _ak = get_provider_api_key(_pn, self.cfg)
+        self._selected_mode = "related_work"
+        if endpoint and model:
+            self.lbl_progress.setText("Launching Related Work...")
+            QTimer.singleShot(150, lambda: self._on_related_work(endpoint, model, _pn, _ak))
         return
     total = res.get("patents", 0)
     no_claims = res.get("without_claims", 0)
@@ -1180,3 +1225,4 @@ def _on_patent_landscape_done(self, res: dict):
 SummarizeTab._on_patent_landscape = _on_patent_landscape
 SummarizeTab._on_patent_tick = _on_patent_tick
 SummarizeTab._on_patent_landscape_done = _on_patent_landscape_done
+SummarizeTab._session_has_patents = _session_has_patents
