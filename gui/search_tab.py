@@ -1270,7 +1270,11 @@ class SearchDownloadTab(QWidget):
         self.title_filter_lbl.setChecked(data.get("title_filter_enabled", True))
         saved_src_filters = data.get("source_filters", {})
         for name, act in self._source_filters.items():
-            if name in saved_src_filters:
+            # Never re-check a key-gated source that has no key: it was disabled +
+            # unchecked at menu build, but the saved session (whose defaults mark
+            # PatentsView/EPO OPS/PQAI True) would otherwise force it checked, so it
+            # showed as permanently selected-but-greyed. Key-gating stays authoritative.
+            if name in saved_src_filters and act.isEnabled():
                 act.blockSignals(True)
                 act.setChecked(saved_src_filters[name])
                 act.blockSignals(False)
