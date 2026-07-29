@@ -76,6 +76,20 @@ reports, audits) lands in the exact on-disk layout the GUI reads.
 
 ---
 
+## ⚡ Hang / Timeout Prevention Rules
+
+These rules prevent the MCP server hanging, crashing, or producing corrupted responses:
+
+| Rule | Detail |
+|---|---|
+| **Sequential calls only** | The server is single-threaded. Never issue two `rf_*` calls in parallel. Always await the previous result before the next. |
+| **CHOICE_REQUIRED → stop everything** | If any tool returns `{"status": "CHOICE_REQUIRED"}`, immediately present the 3 LLM options to the user. Do not call any other tool until the mode is selected. |
+| **No retry on timeout** | Heavy operations (`rf_audit_paper`, `rf_synthesize_*`) continue running on disk even if the MCP client times out. Do NOT re-call the tool. Use `rf_get_audit_result` or `rf_list_summaries` to retrieve the completed result after 30–60 seconds. |
+| **session_id required** | All write operations require `session_id`. Missing it causes results to be lost — the desktop GUI will show nothing. |
+| **Agent LLM delegation** | If agent mode is active and a synthesis tool returns `DELEGATED_TO_AGENT`, generate the markdown content with your own LLM, then persist it using `rf_save_artifact(session_id, relative_path, content)`. |
+
+---
+
 ## Recommended workflow (session-driven)
 
 This is the canonical end-to-end flow. **Run calls sequentially** — the MCP server is

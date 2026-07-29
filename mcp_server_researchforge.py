@@ -24,7 +24,37 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mcp.server.fastmcp import FastMCP
 import researchforge_api as rf
 
-mcp = FastMCP("ResearchForge")
+mcp = FastMCP(
+    "ResearchForge",
+    instructions=(
+        "ResearchForge MCP server — research session manager, paper search, scoring, download, and synthesis.\n\n"
+        "═══════ MANDATORY OPERATING RULES (read before calling any tool) ═══════\n\n"
+        "RULE 1 — LLM EXECUTION MODE (required at session start):\n"
+        "  Before calling any LLM-powered tool (rf_create_session, rf_score_session, rf_synthesize_*, "
+        "rf_generate_*, rf_audit_paper), check if you received a CHOICE_REQUIRED response. "
+        "If so, present exactly these 3 options to the user and wait for their explicit selection:\n"
+        "    1. Configured cloud provider (DeepSeek / OpenAI) → rf_select_llm_mode('configured')\n"
+        "    2. Local model (LM Studio / Ollama)              → rf_select_llm_mode('local', endpoint=...)\n"
+        "    3. Current Agent LLM (you, in-context)           → rf_select_llm_mode('agent')\n"
+        "  State clearly: 'Your choice will remain active for this entire MCP session until the terminal/binary is restarted.'\n"
+        "  Never silently assume or default to any option.\n\n"
+        "RULE 2 — SEQUENTIAL CALLS ONLY (no parallel tool calls):\n"
+        "  The server is single-threaded. Never run two rf_* tool calls in parallel. "
+        "Always wait for the previous call to complete before starting the next.\n\n"
+        "RULE 3 — ALWAYS PASS session_id:\n"
+        "  Every write operation (search, score, download, synthesize, audit) accepts session_id. "
+        "Always pass it. Without session_id, results are NOT persisted — the desktop GUI will show nothing.\n\n"
+        "RULE 4 — HANDLE TIMEOUTS WITHOUT RETRYING:\n"
+        "  Heavy operations (rf_audit_paper, rf_synthesize_*) run on disk asynchronously. "
+        "If your MCP client times out, do NOT re-call the tool. Use rf_get_audit_result or "
+        "rf_list_summaries to retrieve the completed result after waiting 30–60 seconds.\n\n"
+        "RULE 5 — AGENT LLM DELEGATION:\n"
+        "  If agent mode is active and a synthesis tool returns 'DELEGATED_TO_AGENT', "
+        "generate the markdown content with your own LLM, then save it via "
+        "rf_save_artifact(session_id=..., relative_path=..., content=...).\n\n"
+        "Read AGENTS.md for the full session workflow and per-tool reference."
+    ),
+)
 
 
 def _safe(result):
@@ -419,6 +449,7 @@ def rf_refresh_session_downloads(session_id: str) -> dict:
     file_exists/file_path/file_size_mb for every result and save. Call this when
     resuming a session to recover download state."""
     return _safe(rf.refresh_session_downloads(session_id))
+
 
 
 @mcp.tool()
