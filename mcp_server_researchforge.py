@@ -81,18 +81,50 @@ def _check_llm_mode_guard():
     Every tool that calls an LLM must call this first and return early if dict."""
     global _MCP_SESSION_LLM_MODE
     if not _MCP_SESSION_LLM_MODE:
+        # Read current configuration state to show user what's ready vs. what needs setup
+        provider = (rf.get("llm_provider") or "").strip()
+        model = (rf.get("llm_model") or "").strip()
+        endpoint = (rf.get("llm_endpoint") or "").strip()
+
+        # Check if cloud provider is properly configured (has provider + key)
+        has_cloud_key = False
+        cloud_status = "NOT CONFIGURED"
+        if provider:
+            key = rf.get(f"{provider}_api_key") or rf.get("llm_api_key") or ""
+            if key and key.strip():
+                has_cloud_key = True
+                cloud_status = f"READY  (provider={provider}, model={model or 'default'})"
+            else:
+                cloud_status = f"MISSING API KEY  (provider={provider} set, but no key — call rf_set_api_key('{provider}', 'your_key'))"
+        else:
+            cloud_status = "NOT CONFIGURED  (no provider set — call rf_set_llm(provider='deepseek', model='deepseek-chat') + rf_set_api_key(...))"
+
+        # Check local endpoint
+        local_status = f"READY  (endpoint={endpoint})" if endpoint else "NOT CONFIGURED  (no endpoint — need rf_select_llm_mode('local', endpoint='http://localhost:11434/v1', model='...'))"
+
         return {
             "status": "CHOICE_REQUIRED",
-            "message": "EXPLICIT USER CHOICE REQUIRED: No LLM execution mode selected for this MCP session.",
-            "notice": "Your selection will remain active for all operations in this MCP session until the terminal/binary is restarted or you ask to change models.",
+            "message": "LLM execution mode must be selected at the start of each MCP session.",
+            "notice": "Your choice will remain active for ALL operations in this session until the terminal/binary is restarted.",
+            "current_config": {
+                "provider": provider or "none",
+                "model": model or "none",
+                "endpoint": endpoint or "none",
+            },
             "options": [
-                "1. Configured cloud provider (DeepSeek / OpenAI) -> call rf_select_llm_mode('configured')",
-                "2. Local model (LM Studio / Ollama) -> call rf_select_llm_mode('local', endpoint=...)",
-                "3. Current Agent LLM -> call rf_select_llm_mode('agent')"
+                f"1. Cloud provider  [{cloud_status}]  -> rf_select_llm_mode('configured')",
+                f"2. Local model     [{local_status}]  -> rf_select_llm_mode('local', endpoint=..., model=...)",
+                "3. Agent LLM       [ALWAYS READY - uses your current AI assistant in-context, no API key needed]  -> rf_select_llm_mode('agent')",
             ],
-            "instruction": "Present these 3 options to the user and wait for their explicit choice. Explicitly state that this choice will remain active until the terminal or server process is restarted."
+            "instruction": (
+                "Present the 3 options above to the user showing the status of each. "
+                "If Option 1 is NOT CONFIGURED or MISSING API KEY, tell the user what they need to provide first. "
+                "If they choose Option 1 and it needs setup, first call rf_set_llm(provider=..., model=...) and rf_set_api_key(provider, key), then call rf_select_llm_mode('configured'). "
+                "Do NOT proceed with any other tool call until the mode is confirmed."
+            )
         }
     return _MCP_SESSION_LLM_MODE
+
 
 
 # ═══════════════════════════════════════════════════════════════
