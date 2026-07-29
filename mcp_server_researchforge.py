@@ -43,22 +43,26 @@ def _log_mcp(msg: str):
     sys.stderr.flush()
 
 
+_MCP_SESSION_LLM_MODE = None  # In-memory per-process session setting (resets on binary/terminal launch)
+
+
 def _check_llm_mode_guard():
-    """Return the current llm mode string, or a CHOICE_REQUIRED dict if not set.
+    """Return the current llm mode string, or a CHOICE_REQUIRED dict if not set for this session.
     Every tool that calls an LLM must call this first and return early if dict."""
-    mode = (rf.get("mcp_llm_mode") or "").strip().lower()
-    if not mode:
+    global _MCP_SESSION_LLM_MODE
+    if not _MCP_SESSION_LLM_MODE:
         return {
             "status": "CHOICE_REQUIRED",
-            "message": "EXPLICIT USER CHOICE REQUIRED: No LLM execution mode selected.",
+            "message": "EXPLICIT USER CHOICE REQUIRED: No LLM execution mode selected for this MCP session.",
+            "notice": "Your selection will remain active for all operations in this MCP session until the terminal/binary is restarted or you ask to change models.",
             "options": [
                 "1. Configured cloud provider (DeepSeek / OpenAI) -> call rf_select_llm_mode('configured')",
                 "2. Local model (LM Studio / Ollama) -> call rf_select_llm_mode('local', endpoint=...)",
                 "3. Current Agent LLM -> call rf_select_llm_mode('agent')"
             ],
-            "instruction": "Present these 3 options to the user and wait for their explicit choice. Do NOT proceed without a choice."
+            "instruction": "Present these 3 options to the user and wait for their explicit choice. Explicitly state that this choice will remain active until the terminal or server process is restarted."
         }
-    return mode
+    return _MCP_SESSION_LLM_MODE
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -106,27 +110,29 @@ def rf_set_llm(provider: str = "", endpoint: str = "", model: str = "") -> str:
 
 @mcp.tool()
 def rf_select_llm_mode(mode: str = "", provider: str = "", endpoint: str = "", model: str = "", api_key: str = "") -> str:
-    """Select or query the execution mode for synthesis LLM operations.
+    """Select or query the execution mode for synthesis LLM operations in this session.
     If `mode` is empty, returns current selection status and options.
     Valid modes:
       - 'configured': Use ResearchForge's registered cloud provider (DeepSeek, OpenAI, etc.)
       - 'local': Use a local model server (LM Studio, Ollama at http://localhost:11434/v1)
       - 'agent': Delegate LLM synthesis/completion to the calling AI agent in-context.
     Optionally pass provider, endpoint, model, or api_key to configure them in settings at the same time."""
+    global _MCP_SESSION_LLM_MODE
     if not mode:
-        current = rf.get("mcp_llm_mode", "NOT_SET")
-        return (f"Current LLM Mode: {current!r}. Options: 'configured' (cloud), 'local' (Ollama/LM Studio), 'agent' (calling AI agent). "
+        current = _MCP_SESSION_LLM_MODE or "NOT_SET"
+        return (f"Current Session LLM Mode: {current!r}. Options: 'configured' (cloud), 'local' (Ollama/LM Studio), 'agent' (calling AI agent). "
                 f"Configured Provider={rf.get('llm_provider')!r}, Model={rf.get('llm_model')!r}")
     mode_clean = mode.strip().lower()
     if mode_clean not in ("configured", "local", "agent"):
         return f"ERROR: Invalid mode {mode!r}. Must be 'configured', 'local', or 'agent'."
-    rf.set_config("mcp_llm_mode", mode_clean)
+    _MCP_SESSION_LLM_MODE = mode_clean
     if provider or endpoint or model:
         rf.set_llm(provider=provider or None, endpoint=endpoint or None, model=model or None)
     if api_key and provider:
         rf.set_api_key(provider, api_key)
-    _log_mcp(f"LLM execution mode selected: {mode_clean!r} (Provider={rf.get('llm_provider')}, Model={rf.get('llm_model')})")
-    return f"LLM execution mode set to {mode_clean!r}. (Provider={rf.get('llm_provider')}, Endpoint={rf.get('llm_endpoint')}, Model={rf.get('llm_model')})"
+    _log_mcp(f"Session LLM execution mode set to: {mode_clean!r} (Provider={rf.get('llm_provider')}, Model={rf.get('llm_model')})")
+    return f"Session LLM execution mode set to {mode_clean!r}. This selection will remain active for all operations in this MCP process until restarted. (Provider={rf.get('llm_provider')}, Endpoint={rf.get('llm_endpoint')}, Model={rf.get('llm_model')})"
+
 
 
 @mcp.tool()

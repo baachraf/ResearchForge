@@ -40,16 +40,18 @@ All settings persist to `~/.ResearchForge/settings.json` — shared with the GUI
 
 ---
 
-## 🚨 MANDATORY RULE: Explicit LLM Execution Mode Selection (No Fallback)
+## 🚨 MANDATORY RULE: Explicit LLM Execution Mode Selection (Per-Session / No Fallback)
 
-Before triggering any synthesis operation (`rf_synthesize_topic`, `rf_synthesize_global`, `rf_generate_related_work`, `rf_generate_patent_landscape`, `rf_generate_introduction`), the agent **MUST** check `rf_select_llm_mode()` or present the **3-option choice menu** to the user:
+At the start of every new MCP server process / terminal session, before triggering any LLM-powered operation (`rf_create_session`, `rf_score_session`, `rf_synthesize_*`, `rf_generate_*`, `rf_audit_paper`), the server requires an **explicit user selection**. The agent **MUST** present the **3-option choice menu** to the user:
 
 1. **Option 1: Configured Cloud Provider** (DeepSeek, OpenAI, etc.) — `rf_select_llm_mode('configured')`
 2. **Option 2: Local Model** (LM Studio or Ollama at `http://localhost:11434/v1`) — `rf_select_llm_mode('local', endpoint=...)`
 3. **Option 3: Active Agent LLM** (In-context completion by the calling AI agent) — `rf_select_llm_mode('agent')`
 
 **Strict Requirements:**
-- **No Silent Fallbacks:** You must never assume a default provider or silently choose one. If `rf_select_llm_mode()` returns `CHOICE_REQUIRED`, ask the user explicitly.
+- **In-Memory Per Session:** The mode is held in memory for the active MCP server process. It persists for all operations in that session until the terminal/server process is closed or restarted. Every new terminal launch starts unselected (`CHOICE_REQUIRED`).
+- **State Clearly to User:** When presenting the 3 options, inform the user that their choice will remain active for all subsequent operations in this session until the terminal/binary is restarted.
+- **No Silent Fallbacks:** You must never assume a default provider or silently choose one. If a tool returns `CHOICE_REQUIRED`, ask the user explicitly.
 - **Mid-Session Switching:** Whenever the user asks to *"change model"*, *"switch LLM"*, *"re-configure"*, or *"show model menu"*, immediately display the 3-option choice menu again and execute `rf_select_llm_mode(...)`.
 - **Saving Agent Artifacts:** If Option 3 is selected, save your synthesized markdown directly to disk using `rf_save_artifact(session_id=..., relative_path=..., content=...)` to maintain full GUI parity.
 

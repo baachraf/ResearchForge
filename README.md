@@ -304,9 +304,9 @@ When running via MCP, ResearchForge does not automatically pick which LLM to use
 | **Local model** | Use a locally running model via LM Studio or Ollama | `rf_select_llm_mode('local', endpoint='http://localhost:11434/v1', model='...')` |
 | **Agent LLM** | Delegate synthesis/completion to the calling AI agent itself (Gemini, Claude, GPT, …) | `rf_select_llm_mode('agent')` |
 
-The choice is **asked once and saved permanently** to `~/.ResearchForge/settings.json`. All subsequent calls in the same session — and in future sessions — use the saved mode without asking again.
+The choice is **asked once per MCP terminal session** and stored in memory for that server process. All subsequent operations in the same session reuse your selection without asking again. Opening a new terminal or restarting the binary starts a fresh session (`CHOICE_REQUIRED`), ensuring you are always prompted at launch.
 
-To **change the mode** at any time, simply ask your agent: *"switch LLM"*, *"change model"*, or *"show me the model menu"* — it will present the 3 options again and call `rf_select_llm_mode(...)` with your choice.
+To **change the mode** at any time during a session, simply ask your agent: *"switch LLM"*, *"change model"*, or *"show me the model menu"* — it will present the 3 options again and execute `rf_select_llm_mode(...)` with your choice.
 
 When **Agent LLM** mode is selected:
 - The MCP tool returns the fully assembled prompt and context to the agent without making any external HTTP call.
