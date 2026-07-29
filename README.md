@@ -306,6 +306,8 @@ When running via MCP, ResearchForge does not automatically pick which LLM to use
 
 The choice is **asked once per MCP terminal session** and stored in memory for that server process. All subsequent operations in the same session reuse your selection without asking again. Opening a new terminal or restarting the binary starts a fresh session (`CHOICE_REQUIRED`), ensuring you are always prompted at launch.
 
+The menu dynamically displays the **live status** of each option (`READY`, `MISSING API KEY`, or `NOT CONFIGURED`). For new users with no API keys configured, **Option 3 (Agent LLM)** is always ready out-of-the-box without requiring any setup or API key.
+
 To **change the mode** at any time during a session, simply ask your agent: *"switch LLM"*, *"change model"*, or *"show me the model menu"* — it will present the 3 options again and execute `rf_select_llm_mode(...)` with your choice.
 
 When **Agent LLM** mode is selected:
