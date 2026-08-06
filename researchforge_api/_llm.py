@@ -14,12 +14,106 @@ def get_provider_api_key(provider_name: str) -> str:
     return "not-needed"
 
 
+LOCAL_PROVIDERS = ("LM Studio", "Ollama")
+
+# A reasoning model (Qwen3.x, R1 distils) spends tokens thinking before it writes
+# anything: the chain-of-thought goes to `reasoning_content` and `content` stays
+# empty until it finishes. Every call site here reads `content`, so on too small a
+# budget the model returns nothing at all — scoring silently drops to its keyword
+# fallback and analysis fails outright. Measured on LM Studio + qwen3.5-9b:
+# max_tokens=300 -> 299 reasoning tokens, empty content; max_tokens=3000 -> answers
+# after 786. Asking the chat template to skip thinking does NOT work there
+# (`chat_template_kwargs={"enable_thinking": False}` and a `/no_think` suffix were
+# both ignored), so budget is the only lever. Retry once with a bigger one rather
+# than raising every call, so a normal answer never pays for it.
+_REASONING_RETRY_FACTOR = 4
+_REASONING_RETRY_CEILING = 32000
+
+
+def content_of(res) -> str:
+    """The assistant text of a completion, or "" when the model produced none."""
+    try:
+        return (res.choices[0].message.content or "").strip()
+    except (AttributeError, IndexError, TypeError):
+        return ""
+
+
+def empty_reason(res) -> str:
+    """Why a completion came back empty — a specific cause beats "empty response"."""
+    try:
+        choice = res.choices[0]
+    except (AttributeError, IndexError, TypeError):
+        return "the model returned no choices"
+    reasoning = getattr(choice.message, "reasoning_content", None)
+    if choice.finish_reason == "length" and reasoning:
+        # Measured cause on LM Studio: the model was loaded with a 4096-token context,
+        # so max_tokens is clamped to what the prompt leaves and no client-side budget
+        # can help. The context length is a server-side load setting, not an API field.
+        return ("the model spent its whole token budget on reasoning and never wrote an "
+                "answer — reload it with a larger context length (a reasoning model needs "
+                "thousands of tokens before it answers) or use a non-reasoning model")
+    if choice.finish_reason == "length":
+        return "the reply hit the token limit before any content — raise max_tokens"
+    if reasoning:
+        return "the model returned only reasoning, no answer"
+    return "the model returned an empty reply"
+
+
+class _RetryingCompletions:
+    """Retries once with a larger budget when a reasoning model runs out mid-thought."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def create(self, **kwargs):
+        res = self._inner.create(**kwargs)
+        requested = kwargs.get("max_tokens")
+        if content_of(res) or not requested:
+            return res
+        try:
+            if res.choices[0].finish_reason != "length":
+                return res
+        except (AttributeError, IndexError, TypeError):
+            return res
+        bigger = min(requested * _REASONING_RETRY_FACTOR, _REASONING_RETRY_CEILING)
+        if bigger <= requested:
+            return res
+        return self._inner.create(**{**kwargs, "max_tokens": bigger})
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class _RetryingChat:
+    def __init__(self, inner):
+        self._inner = inner
+        self.completions = _RetryingCompletions(inner.completions)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+class _LocalReasoningClient:
+    """Wraps a local OpenAI-compatible client; delegates everything it does not adapt."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.chat = _RetryingChat(inner.chat)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
 def create_llm_client(endpoint="", api_key="not-needed", provider_name="", timeout=120.0):
     if provider_name == "Gemini":
         return _GeminiClientWrapper(api_key, base_url=endpoint, timeout=timeout)
     from openai import OpenAI
-    return OpenAI(base_url=endpoint or _config.get("llm_endpoint", "http://127.0.0.1:1234/v1"),
-                  api_key=api_key, timeout=timeout)
+    client = OpenAI(base_url=endpoint or _config.get("llm_endpoint", "http://127.0.0.1:1234/v1"),
+                    api_key=api_key, timeout=timeout)
+    # Only local providers get the retry — a cloud call must never silently cost 4x.
+    if provider_name in LOCAL_PROVIDERS:
+        return _LocalReasoningClient(client)
+    return client
 
 
 def create_client_from_config(timeout=120.0):

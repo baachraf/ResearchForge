@@ -16,11 +16,14 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from researchforge_api import _analyze
+from researchforge_api import _llm as _real_llm
 
 
-class _FakeMessage:
-    def __init__(self, content):
-        self.message = type("M", (), {"content": content})()
+class _FakeChoice:
+    def __init__(self, content, finish_reason="stop", reasoning=None):
+        self.message = type("M", (), {"content": content,
+                                      "reasoning_content": reasoning})()
+        self.finish_reason = finish_reason
 
 
 class _FakeCompletions:
@@ -29,11 +32,22 @@ class _FakeCompletions:
     def __init__(self, contents):
         self._contents = list(contents)
         self.calls = 0
+        self.max_tokens_seen = []
 
     def create(self, **kwargs):
         self.calls += 1
+        self.max_tokens_seen.append(kwargs.get("max_tokens"))
         content = self._contents.pop(0) if self._contents else ""
-        return type("R", (), {"choices": [_FakeMessage(content)]})()
+        return type("R", (), {"choices": [_FakeChoice(content)]})()
+
+
+def _fake_llm(client):
+    """Stand-in for the _llm module: fake client, real content/diagnosis helpers."""
+    return type("L", (), {
+        "create_client_from_config": staticmethod(lambda **kw: client),
+        "content_of": staticmethod(_real_llm.content_of),
+        "empty_reason": staticmethod(_real_llm.empty_reason),
+    })()
 
 
 class _FakeClient:
@@ -130,8 +144,7 @@ class TestAnalyzePatentRetriesEmpty(unittest.TestCase):
         client = _FakeClient(contents)
         with _Patch(_analyze, _prompts=type("P", (), {
                         "get_prompt": staticmethod(lambda k: "PATENT {title} {claims_text}")})(),
-                    _llm=type("L", (), {
-                        "create_client_from_config": staticmethod(lambda **kw: client)})(),
+                    _llm=_fake_llm(client),
                     _config=type("C", (), {"get": staticmethod(lambda k, d="": "m")})()):
             return _analyze.analyze_patent(self.PATENT), client
 
@@ -166,8 +179,7 @@ class TestLandscapeHeaderDisclosesFailures(unittest.TestCase):
                         analyze_patent=analyse,
                         _prompts=type("P", (), {
                             "get_prompt": staticmethod(lambda k: "L {patent_analyses}")})(),
-                        _llm=type("L", (), {
-                            "create_client_from_config": staticmethod(lambda **kw: client)})(),
+                        _llm=_fake_llm(client),
                         _config=type("C", (), {"get": staticmethod(lambda k, d="": "m")})()):
                 res = _analyze.generate_patent_landscape(session_id="S")
                 with open(res["path"], encoding="utf-8") as f:
@@ -202,6 +214,84 @@ class TestLandscapeHeaderDisclosesFailures(unittest.TestCase):
         self.assertEqual(res["failed"], [])
         self.assertIn("1 of 1 patents analysed", text)
         self.assertNotIn("missing from this report", text)
+
+
+class _ScriptedCompletions:
+    """Yields (content, finish_reason, reasoning) triples, recording each budget."""
+
+    def __init__(self, script):
+        self._script = list(script)
+        self.budgets = []
+
+    def create(self, **kwargs):
+        self.budgets.append(kwargs.get("max_tokens"))
+        content, finish, reasoning = (self._script.pop(0) if self._script
+                                      else ("", "stop", None))
+        return type("R", (), {"choices": [_FakeChoice(content, finish, reasoning)]})()
+
+
+def _wrapped(script):
+    inner = type("C", (), {"completions": _ScriptedCompletions(script)})()
+    client = _real_llm._LocalReasoningClient(type("I", (), {"chat": inner})())
+    return client, inner.completions
+
+
+class TestLocalReasoningRetry(unittest.TestCase):
+    """A local reasoning model that runs out of budget mid-thought gets one bigger try.
+
+    Measured on LM Studio + qwen3.5-9b: max_tokens=300 produced 299 reasoning tokens
+    and empty content; 3000 produced an answer after 786.
+    """
+
+    def test_empty_at_length_retries_with_bigger_budget(self):
+        client, comp = _wrapped([("", "length", "thinking..."), ("answer", "stop", None)])
+        res = client.chat.completions.create(model="m", max_tokens=300, messages=[])
+        self.assertEqual(_real_llm.content_of(res), "answer")
+        self.assertEqual(comp.budgets, [300, 1200], "retry must raise the budget 4x")
+
+    def test_ceiling_caps_the_retry(self):
+        client, comp = _wrapped([("", "length", "t"), ("answer", "stop", None)])
+        client.chat.completions.create(model="m", max_tokens=10000, messages=[])
+        self.assertEqual(comp.budgets, [10000, 32000], "must cap at the ceiling")
+
+    def test_content_first_time_is_not_retried(self):
+        client, comp = _wrapped([("answer", "stop", None)])
+        client.chat.completions.create(model="m", max_tokens=300, messages=[])
+        self.assertEqual(comp.budgets, [300])
+
+    def test_empty_without_length_is_not_a_budget_problem(self):
+        client, comp = _wrapped([("", "stop", None)])
+        client.chat.completions.create(model="m", max_tokens=300, messages=[])
+        self.assertEqual(comp.budgets, [300], "only finish_reason='length' justifies a retry")
+
+
+class TestOnlyLocalProvidersAreWrapped(unittest.TestCase):
+    def test_local_provider_is_wrapped(self):
+        c = _real_llm.create_llm_client("http://127.0.0.1:1234/v1", "not-needed", "LM Studio")
+        self.assertIsInstance(c, _real_llm._LocalReasoningClient)
+
+    def test_cloud_provider_is_not_wrapped(self):
+        # A cloud call must never silently cost 4x.
+        c = _real_llm.create_llm_client("https://api.deepseek.com/v1", "k", "DeepSeek")
+        self.assertNotIsInstance(c, _real_llm._LocalReasoningClient)
+
+
+class TestEmptyReasonNamesTheCause(unittest.TestCase):
+    def _res(self, content, finish, reasoning):
+        return type("R", (), {"choices": [_FakeChoice(content, finish, reasoning)]})()
+
+    def test_reasoning_exhausted_budget(self):
+        msg = _real_llm.empty_reason(self._res("", "length", "thinking..."))
+        self.assertIn("reasoning", msg)
+        # The measured cause is the server-side context length, not the API budget.
+        self.assertIn("context length", msg)
+
+    def test_plain_truncation(self):
+        msg = _real_llm.empty_reason(self._res("", "length", None))
+        self.assertIn("token limit", msg)
+
+    def test_plain_empty(self):
+        self.assertIn("empty reply", _real_llm.empty_reason(self._res("", "stop", None)))
 
 
 if __name__ == "__main__":

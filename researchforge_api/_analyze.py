@@ -1027,18 +1027,19 @@ def analyze_patent(patent: dict, *, prompt_key: str = "per_patent_prompt",
         # scoring path already guards against. Without it a single empty response
         # drops the patent from the landscape permanently, and the report never
         # says so.
-        text = ""
+        text, res = "", None
         for _ in range(2):
             res = client.chat.completions.create(
                 model=_config.get("llm_model", ""),
                 messages=[{"role": "user", "content": full_prompt}],
                 temperature=0.2, max_tokens=8000, timeout=180.0,
             )
-            text = (res.choices[0].message.content or "").strip()
+            text = _llm.content_of(res)
             if text:
                 break
         if not text:
-            return {"error": "LLM returned an empty analysis (2 attempts)"}
+            return {"error": f"LLM returned an empty analysis after 2 attempts — "
+                             f"{_llm.empty_reason(res)}"}
         return {"text": text, "claims_available": bool(claims.strip())}
     except Exception as e:
         return {"error": str(e)}
@@ -1147,9 +1148,10 @@ def generate_patent_landscape(
             messages=[{"role": "user", "content": full_prompt}],
             temperature=0.3, max_tokens=60000, timeout=180.0,
         )
-        text = res.choices[0].message.content or ""
-        if not text.strip():
-            return {"error": "LLM returned an empty landscape report"}
+        text = _llm.content_of(res)
+        if not text:
+            return {"error": f"LLM returned an empty landscape report — "
+                             f"{_llm.empty_reason(res)}"}
         # Report what was analysed AND what was lost. The failed list used to reach
         # the API caller only, so a report missing patents still read as complete —
         # and if a dropped patent was the one carrying claims, the "no claims text"
