@@ -13,7 +13,7 @@ Desktop application that searches academic paper databases, downloads PDFs, and 
 ## Features
 
 - **Multi-source search**: arXiv, OpenAlex, Crossref, Europe PMC, PubMed, Semantic Scholar, CORE, Brave, DuckDuckGo — nine providers, most needing no API key
-- **Patent search**: EPO OPS (worldwide, live-verified), PatentsView (US) and PQAI (semantic prior-art) *(both untested against a live API)* — patents are analysed as patents (problem / solution / what is claimed / assignee) and synthesised into a standalone **Patent Landscape** report
+- **Patent search**: EPO OPS (worldwide, live-verified), PatentsView (US) and PQAI (semantic prior-art) *(both untested against a live API)* — patents are analysed as patents (problem / solution / what is claimed / assignee), downloaded with their original document PDF and metadata, and synthesised into a standalone **Patent Landscape** report
 - **Session creator**: AI-enhanced research description with automatic query generation and "Analyze My Paper" mode
 - **Local PDF injection**: add your own PDFs or entire folders; they auto-participate in relevance scoring and download workflows
 - **Relevance scoring**: LLM rates each paper 0–100 against your research context, with keyword-based fallback
