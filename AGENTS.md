@@ -1,7 +1,7 @@
 # ResearchForge MCP — Agent Guide
 
 > **Read this first.** This file tells an AI agent how to drive ResearchForge via
-> its 55 MCP tools (`rf_*`). The README covers installation; this covers usage.
+> its 57 MCP tools (`rf_*`). The README covers installation; this covers usage.
 
 ## What ResearchForge does
 
@@ -179,7 +179,7 @@ retrieve tool → get the full result.
 
 ---
 
-## Tool reference (53 tools)
+## Tool reference (57 tools)
 
 ### Config (7)
 | Tool | Key params | Purpose |

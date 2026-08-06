@@ -281,6 +281,33 @@ class TestEpoOpsAgainstLivePayloads:
         assert len(indep) < len(text) / 2
         assert "according to claim" not in indep.lower()
 
+    def test_translated_back_references_count_as_dependent(self):
+        """EPO machine translations write "paragraph N" where a native filing writes
+        "claim N". Matching only "claim" returned every claim as independent — the
+        live failure on a KR-origin WO with 21 claims and 17 such back-references."""
+        src = self._src()
+        text = ("1. In a method for monitoring patient risk, irradiating the patient "
+                "with radar and measuring heart rate.\n\n"
+                "2. The method of paragraph 1, wherein the radar is a millimetre-wave radar.\n\n"
+                "3. The method according to paragraph 1, further comprising infrared "
+                "body temperature measurement.\n\n"
+                "4. An apparatus for monitoring patient risk, comprising a radar unit.")
+        indep = src._independent_claims(text)
+        assert indep.startswith("1. In a method")
+        assert "4. An apparatus" in indep
+        assert "paragraph 1" not in indep
+        assert len(src._split_claims(text)) == 4
+
+    def test_ordinary_prose_is_not_a_back_reference(self):
+        """The translated nouns need a number, so normal wording stays independent."""
+        src = self._src()
+        text = ("1. A method of processing a radar echo, wherein the steps are set out "
+                "in paragraph form for clarity.\n\n"
+                "2. The method of claim 1, wherein the echo is filtered.")
+        indep = src._independent_claims(text)
+        assert indep.startswith("1. A method of processing")
+        assert "2." not in indep
+
     def test_claims_language_blocks_are_not_concatenated(self):
         """An EP-B1 publishes EN/DE/FR; only one must be kept."""
         payload = _fixture("epo_claims_ep.json")

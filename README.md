@@ -188,8 +188,12 @@ greyed out, exactly like CORE and Brave.
 > an answer. Verifying EPO turned up six such defects, including a query form that
 > returned 1 hit where the correct one returned 925.
 
-> Patents are never downloaded as PDFs for analysis. Their text — including claims —
-> arrives with the search result, so a patent analyses fully without any file on disk.
+> **Patents are never *parsed* from a PDF — but they are downloaded.** The text used for
+> analysis, including claims, arrives with the search result, so a patent analyses fully
+> without any file on disk. Downloading a patent additionally fetches the EPO original
+> document as `<publication>.pdf` plus `<publication>.json` and `.md` metadata sidecars
+> into the query folder. That PDF is page images — a reading copy, never OCR'd, never fed
+> to the analysis. Only EPO OPS serves one; the other providers write the sidecars alone.
 
 ### What each patent yields
 
@@ -290,9 +294,9 @@ Agent: [calls rf_search → rf_download_papers → rf_analyze_paper × 5]
 > A change made over MCP is picked up immediately by the headless flow; an already-open
 > desktop GUI window may need reopening to reflect it.
 
-**55 MCP tools** cover every button, dropdown, and checkbox from the GUI — including **resumable sessions**: create and search one day, then reload the same session later to download, score, and synthesize, with all state (queries, results, scores, downloads) saved in the session exactly as the GUI persists it.
+**57 MCP tools** cover every button, dropdown, and checkbox from the GUI — including **resumable sessions**: create and search one day, then reload the same session later to download, score, and synthesize, with all state (queries, results, scores, downloads) saved in the session exactly as the GUI persists it.
 
-> **Agents: read [`AGENTS.md`](AGENTS.md) first.** It documents the session-driven workflow, the `session_id` rule (required for GUI parity), the timeout/persistence pattern (heavy ops like audit/synthesize time out at the MCP client but persist to disk — retrieve via `rf_get_audit_result`), and a per-tool reference for all 55 tools.
+> **Agents: read [`AGENTS.md`](AGENTS.md) first.** It documents the session-driven workflow, the `session_id` rule (required for GUI parity), the timeout/persistence pattern (heavy ops like audit/synthesize time out at the MCP client but persist to disk — retrieve via `rf_get_audit_result`), and a per-tool reference for all 57 tools.
 
 ### LLM Execution Mode (MCP-only feature)
 
@@ -544,7 +548,7 @@ The GUI and MCP server are fully interoperable:
 
 | Category | Tools |
 |---|---|
-| **Config** | `rf_get_config`, `rf_get_all_config`, `rf_set_config`, `rf_set_api_key`, `rf_set_llm`, `rf_set_analysis_lens`, `rf_set_search_mode` |
+| **Config** | `rf_get_config`, `rf_get_all_config`, `rf_set_config`, `rf_set_api_key`, `rf_set_llm`, `rf_select_llm_mode`, `rf_set_analysis_lens`, `rf_set_search_mode` |
 | **LLM** | `rf_test_connection`, `rf_fetch_models`, `rf_discover_endpoints` |
 | **Prompts** | `rf_list_prompts`, `rf_get_prompt`, `rf_set_prompt`, `rf_reset_prompt`, `rf_reset_all_prompts` |
 | **Sessions** | `rf_list_sessions`, `rf_load_session`, `rf_save_session`, `rf_delete_session`, `rf_get_session_queries`, `rf_add_query_to_session`, `rf_remove_query_from_session`, `rf_set_session_results`, `rf_update_session` |
@@ -553,7 +557,7 @@ The GUI and MCP server are fully interoperable:
 | **Score** | `rf_score_papers`, `rf_score_session` |
 | **Analyze** | `rf_analyze_paper`, `rf_analyze_own_paper`, `rf_synthesize_topic`, `rf_synthesize_global`, `rf_generate_related_work`, `rf_generate_introduction`, `rf_generate_queries`, `rf_enhance_research`, `rf_run_full_pipeline`, `rf_create_session` |
 | **Patents** | `rf_analyze_patent`, `rf_generate_patent_landscape` |
-| **Summaries** | `rf_list_summaries`, `rf_get_cached_analysis` |
+| **Summaries** | `rf_list_summaries`, `rf_get_cached_analysis`, `rf_save_artifact` |
 | **Audit** | `rf_audit_paper`, `rf_detect_sections`, `rf_get_section_text`, `rf_save_audit_results`, `rf_get_audit_result` |
 
 **Resumable-session tools** (`rf_download_session`, `rf_refresh_session_downloads`, `rf_score_session`, `rf_set_session_results`, `rf_update_session`) write their results back into the session so a later reload sees scores, downloads, and state — the same data the GUI saves. Session downloads land in `output_root/<session name>/<query>/`, matching the GUI's folder layout.
@@ -568,7 +572,7 @@ The GUI and MCP server are fully interoperable:
 |------------------|---------|
 | `main.py` | Entry point: launches QApplication + MainWindow |
 | `llm_pdf_engine.py` | Standalone CLI engine (no GUI dependency), hardcoded fallback prompts |
-| `mcp_server_researchforge.py` | MCP server (FastMCP, stdio) — exposes 55 tools for opencode/Claude Code |
+| `mcp_server_researchforge.py` | MCP server (FastMCP, stdio) — exposes 57 tools for opencode/Claude Code |
 | `researchforge_api/` | Headless API layer — wraps existing modules for MCP and scripting use |
 
 ### `gui/`: PySide6 UI

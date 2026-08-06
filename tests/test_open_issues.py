@@ -11,6 +11,7 @@ Issue map:
   #4  search compact option trims the payload (id/title/url/year/source)
   #5  score_papers populates score_reason (was blank at depth 1)
 """
+import json
 import os
 import tempfile
 import unittest
@@ -40,6 +41,20 @@ class _FakeClient:
 
     def close(self):
         pass
+
+
+def batch_reply(score, reason=None, n=15):
+    """A scoring reply in the JSON-array form score_papers has parsed since ec93fbd.
+
+    Scoring moved to one call per batch of 15, so a mock must answer for every
+    paper in the batch. Ids beyond the batch are ignored by the parser, which
+    lets one canned reply serve batches of any size. Omit ``reason`` to model a
+    model that returns a score and nothing else.
+    """
+    def item(i):
+        return ({"id": i, "score": score} if reason is None
+                else {"id": i, "score": score, "reason": reason})
+    return json.dumps([item(i) for i in range(1, n + 1)])
 
 
 class _IsolatedCase(unittest.TestCase):
@@ -97,7 +112,8 @@ class _IsolatedCase(unittest.TestCase):
             shutil.move(self._settings_backup, self._real_settings_path)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _mock_llm(self, reply="85 - same problem, different approach"):
+    def _mock_llm(self, reply=None):
+        reply = batch_reply(85, "same problem, different approach") if reply is None else reply
         return mock.patch("researchforge_api._score._llm.create_client_from_config",
                           return_value=_FakeClient(reply))
 
@@ -120,7 +136,7 @@ class TestIssue1And3ScoreSession(_IsolatedCase):
             {"id": "p1", "title": "rPPG morphology paper", "abstract": "short abstract about rPPG."},
             {"id": "p2", "title": "another rPPG paper", "abstract": "short abstract two."},
         ])
-        with self._mock_llm("85 - same problem, different approach"):
+        with self._mock_llm(batch_reply(85, "same problem, different approach")):
             out = _score.score_session(sid)
 
         self.assertTrue(out.get("saved"))
@@ -154,7 +170,7 @@ class TestIssue1And3ScoreSession(_IsolatedCase):
             _sessions.save_session(sid, fresh)
             return result
 
-        with self._mock_llm("90 - strong match"), \
+        with self._mock_llm(batch_reply(90, "strong match")), \
              mock.patch("researchforge_api._score.score_papers", side_effect=_racing_score_papers):
             _score.score_session(sid)
 
@@ -254,20 +270,20 @@ class TestIssue4Compact(_IsolatedCase):
 class TestIssue5ScoreReason(_IsolatedCase):
 
     def test_issue5_reason_from_llm(self):
-        """#5: a '<score> - <reason>' reply populates score_reason."""
+        """#5: a reply carrying a reason populates score_reason."""
         from researchforge_api import _score
         papers = [{"id": "p1", "title": "t", "abstract": "short abs"}]
-        with self._mock_llm("72 - same domain, different sensor"):
+        with self._mock_llm(batch_reply(72, "same domain, different sensor")):
             res = _score.score_papers(papers, research_context="rppg")
         self.assertEqual(res[0]["score"], 72)
         self.assertIn("different sensor", res[0]["reason"])
 
     def test_issue5_bare_integer_gets_band_reason(self):
-        """#5: even if the model returns only an integer, score_reason falls back
+        """#5: even if the model returns a score with no reason, score_reason falls back
         to a band label (never blank for a valid score)."""
         from researchforge_api import _score
         papers = [{"id": "p1", "title": "t", "abstract": "short abs"}]
-        with self._mock_llm("40"):
+        with self._mock_llm(batch_reply(40)):
             res = _score.score_papers(papers, research_context="rppg")
         self.assertEqual(res[0]["score"], 40)
         self.assertTrue(res[0]["reason"], "reason must not be blank")

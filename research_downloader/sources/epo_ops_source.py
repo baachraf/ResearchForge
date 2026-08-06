@@ -350,9 +350,19 @@ class EpoOpsSource(DocumentSource):
             return None
 
     # A dependent claim back-references another claim; an independent one does not.
+    # "paragraph"/"item" are here because EPO's machine translations use them where a
+    # native-English filing writes "claim": a KR-origin WO in testing wrote "The method
+    # of paragraph 1" 17 times across 21 claims, and matching only "claim" flagged none
+    # of them — so every claim came back as independent, overstating the owned scope.
+    # That is the failure this guards: it is better to miss an independent claim than to
+    # present all 21 as independent.
     _DEPENDENT_RE = re.compile(
         r"\b(?:as\s+claimed\s+in|according\s+to|as\s+defined\s+in|as\s+set\s+forth\s+in|of|in)\s+"
-        r"(?:any\s+(?:one\s+)?of\s+)?(?:the\s+)?(?:preceding|foregoing|previous)?\s*claims?\b",
+        r"(?:any\s+(?:one\s+)?of\s+)?(?:the\s+)?(?:preceding|foregoing|previous)?\s*"
+        # "claim(s)" keeps its original unnumbered form ("of the preceding claims");
+        # the translated nouns require a number so ordinary prose ("in paragraph form")
+        # cannot be mistaken for a back-reference.
+        r"(?:claims?\b|(?:paragraphs?|items?)\s*\d)",
         re.IGNORECASE,
     )
 

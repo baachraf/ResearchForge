@@ -1,5 +1,5 @@
 """
-ResearchForge MCP Server — exposes all 53 API functions as MCP tools.
+ResearchForge MCP Server — exposes all 57 API functions as MCP tools.
 
 Usage (stdio transport, for opencode/claude):
     python mcp_server_researchforge.py
