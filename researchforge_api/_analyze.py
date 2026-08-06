@@ -231,7 +231,11 @@ def synthesize_topic(
     from researchforge_api import _patents
     pdf_files = _patents.paper_pdfs(input_dir)
     if not pdf_files:
-        return {"error": "No PDFs found", "topic": topic_name}
+        # A patents-only folder has nothing for the paper passes to do. That is a
+        # skip, not a failure: run_full_pipeline gates global synthesis on "no
+        # topic errored", so returning an error here silently suppressed
+        # GLOBAL_SUMMARY.md for every mixed paper+patent session.
+        return {"skipped": "No papers in this folder", "topic": topic_name}
 
     prompt_template = _prompts.get_prompt("per_paper_prompt")
     client = _llm.create_client_from_config(timeout=180.0)
@@ -883,7 +887,10 @@ def run_full_pipeline(
         )
         results["topics"].append({"name": folder_name, "result": topic_result})
 
-    if results["topics"] and not any(t["result"].get("error") for t in results["topics"]):
+    # Skipped topics (patents-only folders) neither block global synthesis nor
+    # justify running it on their own — only a real error blocks it.
+    analysed = [t for t in results["topics"] if not t["result"].get("skipped")]
+    if analysed and not any(t["result"].get("error") for t in results["topics"]):
         if progress_callback:
             progress_callback("Step 2: Global synthesis...")
         results["global"] = synthesize_global(output_dir=model_root, progress_callback=progress_callback)
@@ -1016,14 +1023,22 @@ def analyze_patent(patent: dict, *, prompt_key: str = "per_patent_prompt",
 
     client = _llm.create_client_from_config(timeout=180.0)
     try:
-        res = client.chat.completions.create(
-            model=_config.get("llm_model", ""),
-            messages=[{"role": "user", "content": full_prompt}],
-            temperature=0.2, max_tokens=8000, timeout=180.0,
-        )
-        text = res.choices[0].message.content or ""
-        if not text.strip():
-            return {"error": "LLM returned an empty analysis"}
+        # Retry once on an empty completion — the same transient provider quirk the
+        # scoring path already guards against. Without it a single empty response
+        # drops the patent from the landscape permanently, and the report never
+        # says so.
+        text = ""
+        for _ in range(2):
+            res = client.chat.completions.create(
+                model=_config.get("llm_model", ""),
+                messages=[{"role": "user", "content": full_prompt}],
+                temperature=0.2, max_tokens=8000, timeout=180.0,
+            )
+            text = (res.choices[0].message.content or "").strip()
+            if text:
+                break
+        if not text:
+            return {"error": "LLM returned an empty analysis (2 attempts)"}
         return {"text": text, "claims_available": bool(claims.strip())}
     except Exception as e:
         return {"error": str(e)}
@@ -1135,11 +1150,23 @@ def generate_patent_landscape(
         text = res.choices[0].message.content or ""
         if not text.strip():
             return {"error": "LLM returned an empty landscape report"}
-        header = f"# PATENT LANDSCAPE\n\n_{len(analyses)} patents analysed"
+        # Report what was analysed AND what was lost. The failed list used to reach
+        # the API caller only, so a report missing patents still read as complete —
+        # and if a dropped patent was the one carrying claims, the "no claims text"
+        # note below misattributed its absence to EPO coverage.
+        found = len(analyses) + len(failed)
+        header = f"# PATENT LANDSCAPE\n\n_{len(analyses)} of {found} patents analysed"
         if no_claims:
             header += (f"; {no_claims} with no claims text available via EPO OPS "
                        f"(analysed from title + abstract)")
         header += "._\n\n"
+        if failed:
+            header += (
+                f"> **{len(failed)} patent(s) are missing from this report.** The "
+                "analysis step returned nothing for them, so they contribute to no "
+                "section below. This is a processing failure, not an EPO coverage "
+                "gap — a re-run analyses only the patents still missing:\n>\n")
+            header += "".join(f"> - {f}\n" for f in failed) + "\n"
         if no_claims:
             header += (
                 "> **On the "
