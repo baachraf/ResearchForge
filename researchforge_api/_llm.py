@@ -104,6 +104,45 @@ class _LocalReasoningClient:
         return getattr(self._inner, name)
 
 
+LOCAL_MODEL_REQUIREMENT = (
+    "Pick a NON-REASONING instruct model. A reasoning model (Qwen3.x, R1 distils, "
+    "anything that 'thinks' first) writes its chain-of-thought to reasoning_content and "
+    "leaves content empty until it finishes — this pipeline reads content, so such a "
+    "model returns nothing at all: scoring falls back to keyword matching and synthesis "
+    "fails. Turning thinking off per-request does not work (chat_template_kwargs and "
+    "/no_think are ignored by LM Studio). If you must use one, reload it with a large "
+    "context length — at 4096 it never reaches an answer."
+)
+
+
+def provider_for_endpoint(endpoint: str) -> str:
+    """Which local provider serves this URL. Mirrors gui/llm_provider.py."""
+    return "Ollama" if ":11434" in (endpoint or "") else "LM Studio"
+
+
+def probe_local_model(endpoint: str, model: str, timeout: float = 45.0) -> dict:
+    """Ask the model one trivial question to see whether it answers or only thinks.
+
+    Catching a reasoning model here — at selection time — beats discovering it after a
+    synthesis run that silently produced nothing. Returns
+    ``{"ok": bool, "reasoning": bool, "detail": str}``.
+    """
+    try:
+        from openai import OpenAI
+        client = OpenAI(base_url=endpoint, api_key="not-needed", timeout=timeout)
+        res = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "Reply with the single word: ready"}],
+            max_tokens=64, temperature=0.0,
+        )
+    except Exception as e:
+        return {"ok": False, "reasoning": False,
+                "detail": f"could not reach {endpoint or 'the local server'}: {e}"}
+    if content_of(res):
+        return {"ok": True, "reasoning": False, "detail": "answered a probe prompt directly"}
+    return {"ok": False, "reasoning": True, "detail": empty_reason(res)}
+
+
 def create_llm_client(endpoint="", api_key="not-needed", provider_name="", timeout=120.0):
     if provider_name == "Gemini":
         return _GeminiClientWrapper(api_key, base_url=endpoint, timeout=timeout)

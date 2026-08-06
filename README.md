@@ -301,7 +301,7 @@ When running via MCP, ResearchForge does not automatically pick which LLM to use
 | Option | What it means | How to activate |
 |---|---|---|
 | **Configured cloud provider** | Use the provider already set in ResearchForge settings (e.g. DeepSeek, OpenAI) | `rf_select_llm_mode('configured')` |
-| **Local model** | Use a locally running model via LM Studio or Ollama | `rf_select_llm_mode('local', endpoint='http://localhost:11434/v1', model='...')` |
+| **Local model** | Use a locally running model via LM Studio or Ollama — **must be a non-reasoning instruct model**, see below | `rf_select_llm_mode('local', endpoint='http://localhost:11434/v1', model='...')` |
 | **Agent LLM** | Delegate synthesis/completion to the calling AI agent itself (Gemini, Claude, GPT, …) | `rf_select_llm_mode('agent')` |
 
 The choice is **asked once per MCP terminal session** and stored in memory for that server process. All subsequent operations in the same session reuse your selection without asking again. Opening a new terminal or restarting the binary starts a fresh session (`CHOICE_REQUIRED`), ensuring you are always prompted at launch.
@@ -309,6 +309,42 @@ The choice is **asked once per MCP terminal session** and stored in memory for t
 The menu dynamically displays the **live status** of each option (`READY`, `MISSING API KEY`, or `NOT CONFIGURED`). For new users with no API keys configured, **Option 3 (Agent LLM)** is always ready out-of-the-box without requiring any setup or API key.
 
 To **change the mode** at any time during a session, simply ask your agent: *"switch LLM"*, *"change model"*, or *"show me the model menu"* — it will present the 3 options again and execute `rf_select_llm_mode(...)` with your choice.
+
+#### Local models: use a non-reasoning instruct model
+
+> **A reasoning model will not work here, and the failure is quiet.** Reasoning models
+> (Qwen3.x, DeepSeek-R1 distils — anything that "thinks" before answering) put their
+> chain-of-thought in `reasoning_content` and leave `content` empty until the thinking
+> finishes. Every stage of this pipeline reads `content`, so such a model returns
+> **nothing**: relevance scoring falls back to keyword matching (the reasons are tagged
+> `(keyword)`) and analysis/synthesis fail outright.
+
+**What does not fix it:** disabling thinking per request. Both
+`chat_template_kwargs={"enable_thinking": false}` and a `/no_think` suffix were ignored by
+LM Studio in testing — the model still spent its whole budget reasoning.
+
+**What does:** enough context. Measured on LM Studio with `qwen3.5-9b`, a two-sentence task
+needed ~800 thinking tokens before it wrote a word; loaded at a 4096-token context it never
+reached an answer on the structured per-patent prompt (`prompt 945 + completion 3151 = 4096`,
+`finish_reason: length`). `max_tokens` cannot rescue this — it is clamped by the context
+length the model was **loaded** with, which is a server-side setting.
+
+So: **pick a non-reasoning instruct model** (Gemma, Llama-Instruct, Qwen2.5-Instruct, Mistral…).
+The pipeline does structured extraction against a fixed prompt format; open-ended reasoning
+buys it little and costs thousands of tokens per call.
+
+ResearchForge helps you get this right:
+
+- `rf_discover_endpoints()` lists every LM Studio and Ollama endpoint on localhost **with
+  their installed models**, so you can choose before committing.
+- `rf_select_llm_mode('local', …)` **probes the model** and replies `VERIFIED: this model
+  answered a probe prompt directly`, or `UNUSABLE MODEL — do NOT run the pipeline on it`
+  with the reason. You find out in one second, not after a synthesis run.
+- The **provider is inferred from the endpoint** if you do not pass one. Previously, selecting
+  local mode while a cloud provider was still configured sent every call to the cloud — the
+  client takes its base URL from the provider, not from `llm_endpoint`.
+- When a reply does come back empty, the error names the cause instead of saying "empty
+  response", so you know whether to change the model or its context length.
 
 When **Agent LLM** mode is selected:
 - The MCP tool returns the fully assembled prompt and context to the agent without making any external HTTP call.

@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mcp.server.fastmcp import FastMCP
 import researchforge_api as rf
+from researchforge_api._llm import LOCAL_MODEL_REQUIREMENT as _LOCAL_MODEL_REQUIREMENT
 
 mcp = FastMCP(
     "ResearchForge",
@@ -37,7 +38,12 @@ mcp = FastMCP(
         "    2. Local model (LM Studio / Ollama)              → rf_select_llm_mode('local', endpoint=...)\n"
         "    3. Current Agent LLM (you, in-context)           → rf_select_llm_mode('agent')\n"
         "  State clearly: 'Your choice will remain active for this entire MCP session until the terminal/binary is restarted.'\n"
-        "  Never silently assume or default to any option.\n\n"
+        "  Never silently assume or default to any option.\n"
+        "  If the user picks LOCAL: call rf_discover_endpoints() first, offer only NON-REASONING "
+        "instruct models, and say why — a reasoning model returns an empty answer to every call in "
+        "this pipeline, so scoring silently degrades to keyword matching and synthesis fails. "
+        "rf_select_llm_mode('local', ...) probes the model and replies VERIFIED or UNUSABLE MODEL; "
+        "on UNUSABLE, choose a different model instead of running the pipeline.\n\n"
         "RULE 2 — SEQUENTIAL CALLS ONLY (no parallel tool calls):\n"
         "  The server is single-threaded. Never run two rf_* tool calls in parallel. "
         "Always wait for the previous call to complete before starting the next.\n\n"
@@ -113,13 +119,20 @@ def _check_llm_mode_guard():
             },
             "options": [
                 f"1. Cloud provider  [{cloud_status}]  -> rf_select_llm_mode('configured')",
-                f"2. Local model     [{local_status}]  -> rf_select_llm_mode('local', endpoint=..., model=...)",
+                f"2. Local model     [{local_status}]  -> rf_select_llm_mode('local', endpoint=..., model=...)  "
+                f"** NON-REASONING instruct model required — see local_model_requirement **",
                 "3. Agent LLM       [ALWAYS READY - uses your current AI assistant in-context, no API key needed]  -> rf_select_llm_mode('agent')",
             ],
+            "local_model_requirement": _LOCAL_MODEL_REQUIREMENT,
             "instruction": (
                 "Present the 3 options above to the user showing the status of each. "
                 "If Option 1 is NOT CONFIGURED or MISSING API KEY, tell the user what they need to provide first. "
                 "If they choose Option 1 and it needs setup, first call rf_set_llm(provider=..., model=...) and rf_set_api_key(provider, key), then call rf_select_llm_mode('configured'). "
+                "If they choose Option 2, FIRST call rf_discover_endpoints() to list what is installed, "
+                "then offer the user only NON-REASONING instruct models per local_model_requirement — "
+                "state the restriction in your own message, do not make them discover it. "
+                "rf_select_llm_mode('local', ...) probes the model and answers VERIFIED or UNUSABLE MODEL; "
+                "if UNUSABLE, pick another model rather than running the pipeline. "
                 "Do NOT proceed with any other tool call until the mode is confirmed."
             )
         }
@@ -176,7 +189,13 @@ def rf_select_llm_mode(mode: str = "", provider: str = "", endpoint: str = "", m
     If `mode` is empty, returns current selection status and options.
     Valid modes:
       - 'configured': Use ResearchForge's registered cloud provider (DeepSeek, OpenAI, etc.)
-      - 'local': Use a local model server (LM Studio, Ollama at http://localhost:11434/v1)
+      - 'local': Use a local model server (LM Studio, Ollama at http://localhost:11434/v1).
+                 The model MUST be a non-reasoning instruct model — a reasoning model
+                 ('thinks' before answering) returns empty content to every call in this
+                 pipeline. This mode probes the model and answers VERIFIED or UNUSABLE
+                 MODEL; on UNUSABLE, pick another model, do not run the pipeline. The
+                 provider is inferred from the endpoint when you do not pass one, so
+                 local mode never keeps sending calls to a cloud provider.
       - 'agent': Delegate LLM synthesis/completion to the calling AI agent in-context.
     Optionally pass provider, endpoint, model, or api_key to configure them in settings at the same time."""
     global _MCP_SESSION_LLM_MODE
@@ -187,13 +206,35 @@ def rf_select_llm_mode(mode: str = "", provider: str = "", endpoint: str = "", m
     mode_clean = mode.strip().lower()
     if mode_clean not in ("configured", "local", "agent"):
         return f"ERROR: Invalid mode {mode!r}. Must be 'configured', 'local', or 'agent'."
+    from researchforge_api import _llm as _rf_llm
     _MCP_SESSION_LLM_MODE = mode_clean
+    # Local mode with a cloud provider still selected sent every call to the cloud —
+    # the client picks its base URL from the provider, not from llm_endpoint. Infer it.
+    if mode_clean == "local" and not provider:
+        provider = _rf_llm.provider_for_endpoint(endpoint or rf.get("llm_endpoint") or "")
     if provider or endpoint or model:
         rf.set_llm(provider=provider or None, endpoint=endpoint or None, model=model or None)
     if api_key and provider:
         rf.set_api_key(provider, api_key)
     _log_mcp(f"Session LLM execution mode set to: {mode_clean!r} (Provider={rf.get('llm_provider')}, Model={rf.get('llm_model')})")
-    return f"Session LLM execution mode set to {mode_clean!r}. This selection will remain active for all operations in this MCP process until restarted. (Provider={rf.get('llm_provider')}, Endpoint={rf.get('llm_endpoint')}, Model={rf.get('llm_model')})"
+    state = (f"(Provider={rf.get('llm_provider')}, Endpoint={rf.get('llm_endpoint')}, "
+             f"Model={rf.get('llm_model')})")
+    base = (f"Session LLM execution mode set to {mode_clean!r}. This selection will remain "
+            f"active for all operations in this MCP process until restarted. {state}")
+    if mode_clean != "local":
+        return base
+    # Prove the chosen model actually answers before the user spends a pipeline on it.
+    probe = _rf_llm.probe_local_model(rf.get("llm_endpoint") or "", rf.get("llm_model") or "")
+    if probe["ok"]:
+        return f"{base}\n\nVERIFIED: this model {probe['detail']}."
+    if probe["reasoning"]:
+        return (f"{base}\n\nUNUSABLE MODEL — do NOT run the pipeline on it. The probe got no "
+                f"answer: {probe['detail']}.\n{_rf_llm.LOCAL_MODEL_REQUIREMENT}\n"
+                f"Call rf_discover_endpoints() to list the installed models, pick a "
+                f"non-reasoning instruct one, and call rf_select_llm_mode('local', ...) again. "
+                f"Tell the user which model you picked and why.")
+    return (f"{base}\n\nNOT REACHABLE: {probe['detail']}. Check the server is running and the "
+            f"model name is exact — rf_discover_endpoints() lists what is loaded.")
 
 
 

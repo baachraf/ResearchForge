@@ -294,5 +294,48 @@ class TestEmptyReasonNamesTheCause(unittest.TestCase):
         self.assertIn("empty reply", _real_llm.empty_reason(self._res("", "stop", None)))
 
 
+class TestLocalSelectionGuards(unittest.TestCase):
+    """Selecting a local model must fail loudly at selection time, not mid-pipeline."""
+
+    def test_provider_inferred_from_endpoint(self):
+        # Local mode that leaves a cloud provider selected sends every call to the cloud.
+        self.assertEqual(_real_llm.provider_for_endpoint("http://127.0.0.1:11434/v1"), "Ollama")
+        self.assertEqual(_real_llm.provider_for_endpoint("http://127.0.0.1:1234/v1"), "LM Studio")
+        self.assertEqual(_real_llm.provider_for_endpoint(""), "LM Studio")
+
+    def _probe_against(self, script):
+        import openai
+        inner = type("C", (), {"completions": _ScriptedCompletions(script)})()
+        fake = type("I", (), {"chat": inner})()
+        with _Patch(openai, OpenAI=lambda **kw: fake):
+            return _real_llm.probe_local_model("http://127.0.0.1:1234/v1", "m")
+
+    def test_answering_model_is_verified(self):
+        got = self._probe_against([("ready", "stop", None)])
+        self.assertTrue(got["ok"])
+        self.assertFalse(got["reasoning"])
+
+    def test_reasoning_model_is_flagged_unusable(self):
+        got = self._probe_against([("", "length", "thinking...")])
+        self.assertFalse(got["ok"])
+        self.assertTrue(got["reasoning"])
+        self.assertIn("context length", got["detail"])
+
+    def test_unreachable_server_is_not_reported_as_reasoning(self):
+        import openai
+
+        def boom(**kw):
+            raise OSError("connection refused")
+
+        with _Patch(openai, OpenAI=boom):
+            got = _real_llm.probe_local_model("http://127.0.0.1:9/v1", "m")
+        self.assertFalse(got["ok"])
+        self.assertFalse(got["reasoning"], "a dead server is not a reasoning model")
+        self.assertIn("could not reach", got["detail"])
+
+    def test_requirement_text_names_what_to_pick(self):
+        self.assertIn("NON-REASONING", _real_llm.LOCAL_MODEL_REQUIREMENT)
+
+
 if __name__ == "__main__":
     unittest.main()
