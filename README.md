@@ -73,6 +73,28 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Windows, Linux, macOS
+
+The prebuilt binary on the [releases page](https://github.com/baachraf/ResearchForge/releases/latest)
+is **Windows only** — it is the platform the project is developed and tested on.
+
+Linux and macOS are supported from source, and every feature works there: the
+desktop GUI, and the MCP server (registered as a Python command — see
+[MCP Integration](#-mcp-integration)). Nothing is Windows-exclusive at the code level.
+
+If you want a single-file binary on your own machine, build it yourself with
+[`build_binary.sh`](build_binary.sh) — Nuitka cannot cross-compile, so the build has to
+run on the target OS, which is exactly what that script is for:
+
+```bash
+python3 -m venv venv && venv/bin/pip install -r requirements.txt nuitka
+./build_binary.sh          # produces build/ResearchForge (Linux) or build/ResearchForge.app (macOS)
+```
+
+> Linux also needs the Qt runtime libraries the GUI links against:
+> `sudo apt install build-essential patchelf libegl1 libxkbcommon-x11-0 libxcb-cursor0 libgl1`
+> A macOS build is unsigned, so Gatekeeper will ask you to confirm it on first launch.
+
 ### LLM Setup
 
 ResearchForge supports both local and remote LLM providers:
@@ -444,7 +466,7 @@ Set up the ResearchForge MCP server for me.
 
 4. Then tell me to restart my agent session so the server loads, and after
    I restart, confirm the ResearchForge tools are available (there should be
-   55 rf_* tools — e.g. call rf_test_connection).
+   57 rf_* tools — e.g. call rf_test_connection).
 
 Notes: on first run it creates ~/.ResearchForge/ (settings, sessions,
 downloads, summaries), shared with the ResearchForge desktop app. Once it's
@@ -486,11 +508,11 @@ pip install "mcp[cli]"
 
 > Use forward slashes in paths. On Linux/macOS, the venv python is at `venv/bin/python`.
 
-3. **Restart opencode**. The 55 `rf_*` tools are now available.
+3. **Restart opencode**. The 57 `rf_*` tools are now available.
 
 ### Install for Claude Code (global)
 
-Register the server once at **user scope** (`-s user`) so the 55 `rf_*` tools are available in **every** Claude Code project, not just the current directory:
+Register the server once at **user scope** (`-s user`) so the 57 `rf_*` tools are available in **every** Claude Code project, not just the current directory:
 
 ```bash
 claude mcp add researchforge -s user -- /path/to/ResearchForge/venv/Scripts/python.exe /path/to/ResearchForge/mcp_server_researchforge.py
@@ -541,7 +563,7 @@ The GUI and MCP server are fully interoperable:
 - **Continue from your terminal** — the MCP server reads the same settings. Search, download, and analyze from opencode/Claude Code.
 - **Switch back to the GUI** — sessions created via MCP appear in the session list. Downloads and summaries are visible in the respective tabs.
 
-### Available MCP tools (55)
+### Available MCP tools (57)
 
 <details>
 <summary>Click to expand full tool list</summary>
@@ -628,7 +650,9 @@ All API keys (and the shared contact email) are entered via **Set Keys** on the 
 
 ### `themes/`: JSON theme files (`default.json`, `dark.json`)
 
-### `build_exe.bat`: Nuitka MSVC 2022 onefile compiler script
+### `build_exe.bat`: Nuitka MSVC 2022 onefile compiler script (Windows)
+
+### `build_binary.sh`: Nuitka onefile compiler script (Linux / macOS)
 
 ---
 
