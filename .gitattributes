@@ -1,0 +1,5 @@
+# Shell scripts must keep LF endings: a CR in the shebang makes Linux/macOS
+# reject the file with "bad interpreter". core.autocrlf=true on Windows would
+# otherwise convert them on checkout.
+*.sh text eol=lf
+*.bat text eol=crlf
