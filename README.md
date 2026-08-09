@@ -34,7 +34,13 @@ Desktop application that searches academic paper databases, downloads PDFs, and 
   <img src="screenshot/search.png" alt="Search & Download" width="450"/>
 </p>
 
-<p align="center"><em>Search & Download: query management, multi-source search, relevance scoring, PDF management</em></p>
+<p align="center"><em>Search &amp; Download: query management, multi-source search across papers and patents, relevance scoring, PDF management</em></p>
+
+<p align="center">
+  <img src="screenshot/prompt.png" alt="Settings &amp; Prompts" width="450"/>
+</p>
+
+<p align="center"><em>Settings &amp; Prompts: every stage of the pipeline is an editable prompt — save your edits as your default or as named presets, and reset to the bundled original at any time</em></p>
 
 ---
 
